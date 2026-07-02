@@ -7,7 +7,7 @@ const NeuronRadar = (() => {
   const LS_TOPICS = "neuron.radar.topics";
 
   const rstate = {
-    topics: loadTopics(),          // {id, query, emoji}
+    topics: loadTopics(),          // {id, label, query, emoji} – label = Eingabe, query = Suchwörter
     data: {},                      // id -> {articles, errors, fetched_at, loading}
     ai: {},                        // id -> {text, model, loading, error}
     activeId: null,
@@ -37,6 +37,25 @@ const NeuronRadar = (() => {
     localStorage.setItem(LS_TOPICS, JSON.stringify(rstate.topics));
   }
   function uid() { return Math.random().toString(36).slice(2, 10); }
+
+  // Anzeigename eines Themas (ältere gespeicherte Themen haben kein label)
+  function topicName(topic) { return topic.label || topic.query; }
+
+  // Aus einer ganzen Frage/Hypothese die Suchwörter für die News-Suche ableiten;
+  // kurze Schlagwort-Eingaben bleiben unverändert.
+  const META_WORDS = new Set("hypothese these annahme vermutung behauptung frage fragestellung stimmt eigentlich wirklich vielleicht könnte könnten würde würden sollte sollten".split(" "));
+  function deriveQuery(text) {
+    const words = text.match(/[\p{L}\p{N}][\p{L}\p{N}\-']*/gu) || [];
+    if (words.length <= 3 && !/[?!.]/.test(text)) return text.trim();
+    const picked = [];
+    for (const w of words) {
+      const lc = w.toLowerCase();
+      if (lc.length < 3 || STOP.has(lc) || META_WORDS.has(lc)) continue;
+      if (!picked.some((p) => p.toLowerCase() === lc)) picked.push(w);
+      if (picked.length >= 5) break;
+    }
+    return picked.length ? picked.join(" ") : text.trim();
+  }
 
   function relTime(ts) {
     if (!ts) return "";
@@ -365,7 +384,7 @@ const NeuronRadar = (() => {
         body: JSON.stringify({
           model: "claude-opus-4-8",
           max_tokens: 4096,
-          messages: [{ role: "user", content: buildReportPrompt(topic.query, articles) }],
+          messages: [{ role: "user", content: buildReportPrompt(topicName(topic), articles) }],
         }),
       });
       if (!resp.ok) {
@@ -478,7 +497,7 @@ const NeuronRadar = (() => {
       }
       card.innerHTML = `
         <div class="radar-tile-top">
-          <span>${topic.emoji} <b>${esc(topic.query)}</b></span>
+          <span>${topic.emoji} <b>${esc(topicName(topic))}</b></span>
           <button class="radar-tile-x" title="Entfernen">✕</button>
         </div>${body}`;
       card.addEventListener("click", () => openDetail(topic.id));
@@ -490,11 +509,11 @@ const NeuronRadar = (() => {
     });
   }
 
-  function addTopic(query, emoji) {
-    query = (query || "").trim();
-    if (!query) return;
-    if (rstate.topics.some((t) => t.query.toLowerCase() === query.toLowerCase())) return;
-    const topic = { id: uid(), query, emoji: emoji || REMOJIS[rstate.topics.length % REMOJIS.length] };
+  function addTopic(input, emoji) {
+    const label = (input || "").trim();
+    if (!label) return;
+    if (rstate.topics.some((t) => topicName(t).toLowerCase() === label.toLowerCase())) return;
+    const topic = { id: uid(), label, query: deriveQuery(label), emoji: emoji || REMOJIS[rstate.topics.length % REMOJIS.length] };
     rstate.topics.push(topic);
     saveTopics();
     renderGrid();
@@ -537,7 +556,7 @@ const NeuronRadar = (() => {
     const s = computeStats(articles);
     const an = analyze(topic.query, articles);
 
-    document.querySelector("#radarDetailName").textContent = `${topic.emoji} ${topic.query}`;
+    document.querySelector("#radarDetailName").textContent = `${topic.emoji} ${topicName(topic)}`;
     const trendTxt = s.trend === Infinity ? "▲ neu" : s.trend === null ? "–" : `${s.trend > 0 ? "▲ +" : s.trend < 0 ? "▼ " : "≈ "}${s.trend}%`;
     document.querySelector("#radarStats").innerHTML = `
       <div class="radar-stat"><b>${s.last24}</b><span>Meldungen · 24 Std.</span></div>
@@ -546,7 +565,7 @@ const NeuronRadar = (() => {
       <div class="radar-stat"><b>${s.sources}</b><span>Quellen</span></div>`;
 
     document.querySelector("#radarAutoSummary").textContent = articles.length
-      ? autoSummary(topic.query, s, an, articles.length)
+      ? autoSummary(topicName(topic), s, an, articles.length)
       : (entry.loading ? "Lade Nachrichten …" : "Noch keine Daten.");
 
     document.querySelector("#radarKeywords").innerHTML = hbar(an.keywords.map((k) => ({ label: k.word, value: k.count })), "#e5402f");
@@ -584,7 +603,7 @@ const NeuronRadar = (() => {
       ((rstate.data[topic.id] || {}).articles || []).forEach((a) => {
         const name = a.source || "Unbekannte Quelle";
         if (!bySource.has(name)) bySource.set(name, []);
-        bySource.get(name).push({ ...a, topic: topic.query });
+        bySource.get(name).push({ ...a, topic: topicName(topic) });
         total++;
       });
     });
@@ -605,13 +624,18 @@ const NeuronRadar = (() => {
 
   // Mit NEURON besprechen: eigenes Gespräch pro Thema, mit Schlagzeilen-Kontext
   function discuss(topic) {
+    const name = topicName(topic);
     const entry = rstate.data[topic.id];
     const articles = (entry && entry.articles) || [];
     const lines = articles.slice(0, 30).map((a) => `- ${a.title} (${a.source || "?"}, ${relTime(a.ts)})`);
     newChat();   // startet ein neues, eigenes Gespräch (erscheint in der Seitenleiste)
-    state.pendingChatTitle = `📡 ${topic.query}`;
-    state.newsContext = `Thema: ${topic.query}\nAktuelle Schlagzeilen (7 Tage):\n${lines.join("\n")}`;
-    askFromSidebar(`Lass uns die aktuelle Nachrichtenlage zum Thema "${topic.query}" besprechen: Was sind die wichtigsten Entwicklungen, wie ordnest du sie ein – und wo sollte ich kritisch sein?`);
+    state.pendingChatTitle = `📡 ${name}`;
+    state.newsContext = `Thema: ${name}\nAktuelle Schlagzeilen (7 Tage):\n${lines.join("\n")}`;
+    closeSidebar();
+    showChat();
+    $("#input").value = `Lass uns die aktuelle Nachrichtenlage zum Thema "${name}" besprechen: Was sind die wichtigsten Entwicklungen, wie ordnest du sie ein – und wo sollte ich kritisch sein?`;
+    autoGrow();
+    send();
   }
 
   function esc(s) {
@@ -675,7 +699,7 @@ const NeuronRadar = (() => {
     document.querySelector("#radarSourcesBackBtn").addEventListener("click", showHome);
     document.querySelector("#radarDeleteBtn").addEventListener("click", () => {
       const topic = rstate.topics.find((t) => t.id === rstate.activeId);
-      if (topic && confirm(`Thema „${topic.query}" wirklich entfernen?`)) removeTopic(topic.id);
+      if (topic && confirm(`Thema „${topicName(topic)}" wirklich entfernen?`)) removeTopic(topic.id);
     });
     document.querySelector("#radarAiBtn").addEventListener("click", () => {
       const topic = rstate.topics.find((t) => t.id === rstate.activeId);
