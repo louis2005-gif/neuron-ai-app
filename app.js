@@ -417,20 +417,12 @@ function renderOnboarding() {
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
-const SUGGESTIONS = [
-  "Wie nehme ich ab, ohne zu viel Muskeln zu verlieren?",
-  "Ist Intervallfasten wirklich besser?",
-  "Wie verbessere ich meinen Schlaf?",
-  "Low-Carb oder ausgewogene Mischkost?",
-];
-
 function showChat() {
   $("#onboarding").classList.add("hidden");
   const radar = $("#radar");
   if (radar) radar.classList.add("hidden");
   $("#chat").classList.remove("hidden");
   setNav("chat");
-  renderSuggestions();
   if (!$("#messages").children.length) renderWelcome();
   $("#input").focus();
 }
@@ -451,22 +443,6 @@ function setNav(which) {
   });
 }
 
-function renderSuggestions() {
-  const box = $("#suggestions");
-  box.innerHTML = "";
-  SUGGESTIONS.forEach((s) => {
-    const chip = document.createElement("button");
-    chip.className = "chip";
-    chip.textContent = s;
-    chip.addEventListener("click", () => {
-      $("#input").value = s;
-      autoGrow();
-      send();
-    });
-    box.appendChild(chip);
-  });
-}
-
 function renderWelcome() {
   const w = document.createElement("div");
   w.className = "welcome msg-neuron";
@@ -475,20 +451,6 @@ function renderWelcome() {
     "<h2>Womit kann NEURON dir helfen?</h2>" +
     "Stell eine Frage. NEURON <b>recherchiert</b>, bewertet die <b>Quellen</b>, stellt <b>Pro</b> und <b>Contra</b> gegenüber und gibt dir eine ehrliche <b>Einschätzung</b> – damit <b>du</b> entscheidest.";
   $("#messages").appendChild(w);
-}
-
-function renderSideSuggestions() {
-  const box = $("#sideSuggestions");
-  if (!box) return;
-  box.innerHTML = "";
-  SUGGESTIONS.forEach((s) => {
-    const b = document.createElement("button");
-    b.className = "side-item";
-    b.textContent = s;
-    b.title = s;
-    b.addEventListener("click", () => { askFromSidebar(s); });
-    box.appendChild(b);
-  });
 }
 
 function renderChatList() {
@@ -519,14 +481,6 @@ function renderChatList() {
     row.appendChild(x);
     box.appendChild(row);
   });
-}
-
-function askFromSidebar(q) {
-  closeSidebar();
-  showChat();
-  $("#input").value = q;
-  autoGrow();
-  send();
 }
 
 function newChat() {
@@ -832,7 +786,6 @@ function init() {
     });
   });
 
-  renderSideSuggestions();
   renderChatList();
 
   initBackground();
