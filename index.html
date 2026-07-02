@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>NEURON AI</title>
+  <meta name="theme-color" content="#1c1e22" />
+  <meta name="description" content="Dein strategischer Sparringspartner mit News-Radar – ehrliche Auswertungen statt blinder Bestätigung." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="NEURON AI" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="icon-192.png" />
+</head>
+<body>
+  <canvas id="bgCanvas" class="bg-canvas" aria-hidden="true"></canvas>
+
+  <div class="app">
+    <!-- Seitenleiste -->
+    <aside id="sidebar" class="sidebar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <div>
+          <div class="brand-name">NEURON<span>AI</span></div>
+          <div class="brand-sub">Arbeitssystem „Mindless“</div>
+        </div>
+      </div>
+
+      <button id="newChatBtn" class="new-chat">＋ Neue Frage</button>
+
+      <nav class="side-nav">
+        <button data-nav="chat" class="side-nav-btn active">💬 Sparringspartner</button>
+        <button data-nav="radar" class="side-nav-btn">📡 News-Radar</button>
+      </nav>
+
+      <div class="side-scroll">
+        <div class="side-group">
+          <div class="side-title">Vorschläge</div>
+          <div id="sideSuggestions" class="side-list"></div>
+        </div>
+        <div class="side-group">
+          <div class="side-title">Gespräche</div>
+          <div id="sideHistory" class="side-list"></div>
+        </div>
+      </div>
+
+      <div class="side-foot">
+        <div id="modeBanner" class="mode-banner">Verbinde …</div>
+        <button id="settingsBtn2" class="side-settings">⚙ Einstellungen</button>
+      </div>
+    </aside>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+    <!-- Hauptbereich -->
+    <main class="main">
+      <header class="main-head">
+        <button id="menuBtn" class="icon-btn only-mobile" aria-label="Menü">☰</button>
+        <div class="main-title"><span class="mt-name">NEURON<span>AI</span></span></div>
+        <div class="head-actions">
+          <button id="newChatBtnTop" class="icon-btn only-mobile" aria-label="Neue Frage">＋</button>
+          <button id="settingsBtn" class="icon-btn" aria-label="Einstellungen">⚙</button>
+        </div>
+      </header>
+
+      <!-- Onboarding -->
+      <section id="onboarding" class="screen onboarding hidden">
+        <div class="ob-inner">
+          <h1 class="ob-title">Willkommen bei <b>NEURON&nbsp;AI</b></h1>
+          <p class="ob-quote">„Wir brauchen nicht mehr Technologie im Menschen, sondern mehr Mensch in der Technologie.“</p>
+          <p class="ob-lead">NEURON bestätigt dich nicht blind. Es recherchiert, wägt <b>Pro</b> und <b>Contra</b> ab und gibt dir ehrliches Feedback – damit du dir deine <b>eigene</b> Meinung bildest. 5 kurze Fragen für maximale Individualisierung:</p>
+          <div id="obSteps"></div>
+        </div>
+      </section>
+
+      <!-- Chat -->
+      <section id="chat" class="screen chat hidden">
+        <div id="messages" class="messages"></div>
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="suggestions" id="suggestions"></div>
+            <div class="composer-row">
+              <textarea id="input" rows="1" placeholder="Stelle eine Frage – z. B. „Wie nehme ich ab, ohne zu viel Muskeln zu verlieren?“"></textarea>
+              <button id="sendBtn" class="send-btn" aria-label="Senden">➤</button>
+            </div>
+            <div class="composer-hint">NEURON bildet keine Meinung für dich – es gibt dir die Grundlage, deine eigene zu bilden.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- News-Radar -->
+      <section id="radar" class="screen radar hidden">
+        <div class="radar-scroll">
+
+          <!-- Übersicht: Themen-Kacheln -->
+          <div id="radarHome">
+            <div class="radar-head">
+              <div>
+                <h2 class="radar-title">📡 News-Radar</h2>
+                <div id="radarUpdated" class="radar-sub">Noch nicht aktualisiert</div>
+              </div>
+              <div class="radar-actions">
+                <button id="radarSourcesBtn" class="icon-btn" title="Quellenverzeichnis">📚</button>
+                <button id="radarRefreshBtn" class="icon-btn" title="Aktualisieren">⟳</button>
+              </div>
+            </div>
+            <div id="radarGrid" class="radar-grid"></div>
+            <div id="radarEmpty" class="radar-empty hidden">
+              <p>Füge Themen hinzu, die du beobachten willst – wie Städte in der Wetter-App.</p>
+              <div id="radarSuggestions" class="chip-row"></div>
+            </div>
+          </div>
+
+          <!-- Detail: ein Thema -->
+          <div id="radarDetail" class="hidden">
+            <div class="radar-head">
+              <button id="radarBackBtn" class="icon-btn" title="Zurück">←</button>
+              <h2 class="radar-title" id="radarDetailName"></h2>
+              <div class="radar-actions">
+                <button id="radarDeleteBtn" class="icon-btn" title="Thema entfernen">🗑</button>
+              </div>
+            </div>
+            <div id="radarStats" class="radar-stats"></div>
+            <div class="radar-card">
+              <div class="radar-card-head">
+                <h3>Lagebericht</h3>
+                <div class="radar-card-actions">
+                  <button id="radarAiBtn" class="btn-primary small">✨ Ausführliche KI-Auswertung</button>
+                  <button id="radarDiscussBtn" class="btn-ghost small">💬 Mit NEURON besprechen</button>
+                </div>
+              </div>
+              <div id="radarAiBox" class="radar-ai hidden"></div>
+              <p id="radarAutoSummary" class="radar-auto"></p>
+              <div class="radar-insights">
+                <div class="radar-insight"><h4>Top-Schlagwörter</h4><div id="radarKeywords"></div></div>
+                <div class="radar-insight"><h4>Schwerpunkte</h4><div id="radarClusters"></div></div>
+                <div class="radar-insight"><h4>Quellen-Verteilung</h4><div id="radarSourcesChart"></div></div>
+              </div>
+            </div>
+            <div class="radar-card">
+              <div class="radar-card-head">
+                <h3>Nachrichtenaufkommen</h3>
+                <div class="radar-range">
+                  <button data-range="7d" class="active">7 Tage</button>
+                  <button data-range="48h">48 Std.</button>
+                </div>
+              </div>
+              <div id="radarChart"></div>
+            </div>
+            <div class="radar-card">
+              <h3 id="radarListTitle">Neueste Meldungen</h3>
+              <ul id="radarArticles" class="radar-articles"></ul>
+            </div>
+          </div>
+
+          <!-- Quellenverzeichnis -->
+          <div id="radarSources" class="hidden">
+            <div class="radar-head">
+              <button id="radarSourcesBackBtn" class="icon-btn" title="Zurück">←</button>
+              <h2 class="radar-title">📚 Quellenverzeichnis</h2>
+              <span></span>
+            </div>
+            <p class="radar-sub" id="radarSourcesSummary"></p>
+            <div id="radarSourcesContent"></div>
+          </div>
+
+        </div>
+        <button id="radarAddBtn" class="radar-fab" title="Thema hinzufügen">＋</button>
+      </section>
+    </main>
+  </div>
+
+  <!-- Thema hinzufügen -->
+  <div id="radarAddModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Thema hinzufügen</h2>
+      <label class="field-label">Suchbegriff</label>
+      <input id="radarTopicInput" type="text" class="text-input" placeholder="z. B. Ukraine, KI, Börse, ein Firmenname …" />
+      <label class="field-label">Vorschläge</label>
+      <div id="radarModalSuggestions" class="chip-row"></div>
+      <div class="modal-actions">
+        <button id="radarAddCancel" class="btn-ghost">Abbrechen</button>
+        <button id="radarAddOk" class="btn-primary">Hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Einstellungen -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Einstellungen</h2>
+
+      <label class="field-label">Anthropic API-Key (optional)</label>
+      <p class="field-hint">Für echte, tagesaktuelle Recherche. Ohne Key läuft NEURON im Demo-Modus. Der Key wird nur lokal in deinem Browser gespeichert und an die Anthropic-API gesendet.</p>
+      <input id="apiKeyInput" type="password" placeholder="sk-ant-..." class="text-input" />
+
+      <label class="field-label">Bevorzugter Stil</label>
+      <select id="stilInput" class="text-input">
+        <option value="ausgewogen">Ausgewogen</option>
+        <option value="wissenschaftliche Evidenz">Eher wissenschaftliche Evidenz</option>
+        <option value="praktische Tipps">Eher praktische Tipps</option>
+      </select>
+
+      <label class="field-label">Animierter Hintergrund</label>
+      <div class="toggle-row">
+        <select id="bgIntensityInput" class="text-input">
+          <option value="0.6">Ruhig &amp; subtil</option>
+          <option value="1" selected>Ausgewogen</option>
+          <option value="1.5">Lebhaft &amp; energetisch</option>
+        </select>
+        <label class="switch">
+          <input type="checkbox" id="bgToggle" checked />
+          <span>an</span>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button id="resetBtn" class="btn-ghost">Onboarding zurücksetzen</button>
+        <button id="saveSettingsBtn" class="btn-primary">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="bg.js"></script>
+  <script src="app.js"></script>
+  <script src="radar.js"></script>
+</body>
+</html>
