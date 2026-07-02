@@ -32,3 +32,6 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # GitHubs Warteschlange ist teils langsam – bis zu 30 Minuten warten
+          timeout: 1800000
