@@ -102,14 +102,15 @@
     else charge = 0;                                       // unsichtbar zurücksetzen
   }
 
-  // Wie stark ein Punkt gerade von der Ladewelle erfasst ist (0 = ruhig).
-  // Mit energy multipliziert: die Welle blendet weich ein und aus.
+  // Wie stark ein Punkt gerade auflädt (0 = ruhig). Während des Denkens
+  // trägt das GANZE Netz eine konstante Grundladung – nur eine heiße
+  // Lichtfront wandert in Schleife hindurch. Sie verlässt das Bild rechts
+  // weich und kommt links weich wieder herein: kein Abfall, kein Reset.
   function boostFor(x) {
     if (energy < 0.02) return 0;
     const frontX = charge * (W + 260) - 130;
-    const d = frontX - x;
-    if (d < 0) return 0;
-    return (0.35 + Math.exp(-Math.pow(d / 140, 2)) * 1.25) * energy;
+    const bump = Math.exp(-Math.pow((x - frontX) / 150, 2)) * 1.1;
+    return (0.35 + bump) * energy;
   }
 
   function linkColor(a, b, alpha) {
