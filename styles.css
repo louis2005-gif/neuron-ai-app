@@ -74,6 +74,13 @@ html, body {
   color: var(--muted); font-weight: 800; padding: 0 8px 8px;
 }
 .side-list { display: flex; flex-direction: column; gap: 4px; }
+.side-search {
+  width: 100%; margin: 0 0 8px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: rgba(36, 38, 44, 0.7); color: var(--text);
+  font-size: 13px; font-family: inherit;
+}
+.side-search:focus { outline: none; border-color: var(--accent); }
+.side-search::placeholder { color: var(--muted); }
 .side-item {
   text-align: left; width: 100%; padding: 9px 10px; border-radius: 9px;
   background: transparent; border: 1px solid transparent; color: var(--text);
@@ -117,7 +124,10 @@ html, body {
   display: inline-flex; align-items: center; justify-content: center;
 }
 .icon-btn:hover { border-color: var(--accent); }
+.icon-btn.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 12px rgba(229, 64, 47, 0.25); }
 .only-mobile { display: none; }
+
+#regenRow { display: flex; justify-content: center; padding: 2px 0 6px; }
 
 .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .hidden { display: none !important; }
@@ -371,3 +381,8 @@ html, body {
 }
 .side-chat:hover .side-chat-x { opacity: 1; }
 .side-chat-x:hover { color: #ff8a7a; background: rgba(229,64,47,0.15); }
+.side-chat-x.pinned { opacity: 1; color: #ff8a7a; }
+/* Auf Touch-Geräten gibt es kein Hover – Aktionen dezent sichtbar lassen */
+@media (max-width: 860px) {
+  .side-chat-x { opacity: 0.45; }
+}

@@ -10,14 +10,20 @@ const LS_CHATS = "neuron.chats";
 
 const $ = (sel) => document.querySelector(sel);
 
+const HINT_DEFAULT = "NEURON bildet keine Meinung für dich – es gibt dir die Grundlage, deine eigene zu bilden.";
+const HINT_TEMP = "🕶 Temporäres Gespräch – wird nicht gespeichert.";
+
 let state = {
   mode: "demo",
   profile: loadProfile(),
   apiKey: localStorage.getItem(LS_KEY) || "",
-  chats: loadChats(),        // [{id, title, created, messages:[{role:'user',text}|{role:'neuron',answer,warnung}]}]
+  chats: loadChats(),        // [{id, title, created, pinned?, messages:[{role:'user',text}|{role:'neuron',answer,warnung}]}]
   currentChatId: null,
   pendingChatTitle: "",      // z. B. vom News-Radar gesetzt („📡 Thema“)
   newsContext: "",           // wird vom News-Radar gesetzt („Besprechen“)
+  temporary: false,          // Temporärer Chat: nichts wird gespeichert
+  tempChat: null,
+  chatFilter: "",            // Suchtext für die Gesprächsliste
 };
 
 // ---------------------------------------------------------------------------
@@ -37,6 +43,18 @@ function saveChats() {
 function currentChat() {
   return state.chats.find((c) => c.id === state.currentChatId) || null;
 }
+// Das Gespräch, in das gerade geschrieben wird (im Temporär-Modus ein
+// reines In-Memory-Gespräch, das nie gespeichert wird)
+function activeChat() {
+  if (state.temporary) {
+    if (!state.tempChat) state.tempChat = { messages: [] };
+    return state.tempChat;
+  }
+  return currentChat();
+}
+function persistChats() {
+  if (!state.temporary) saveChats();
+}
 function createChat(title) {
   const chat = {
     id: Math.random().toString(36).slice(2, 10),
@@ -53,6 +71,7 @@ function createChat(title) {
 function openChatById(id) {
   const chat = state.chats.find((c) => c.id === id);
   if (!chat) return;
+  setTemporary(false);
   state.currentChatId = id;
   const box = $("#messages");
   box.innerHTML = "";
@@ -66,10 +85,29 @@ function openChatById(id) {
       renderAnswer(el, m.answer, m.warnung);
     }
   });
+  addRegenRow();
   renderChatList();
   closeSidebar();
   showChat();
   scrollDown();
+}
+
+function renameChat(id) {
+  const chat = state.chats.find((c) => c.id === id);
+  if (!chat) return;
+  const name = prompt("Neuer Name für das Gespräch:", chat.title);
+  if (name === null) return;
+  chat.title = (name.trim() || chat.title).slice(0, 60);
+  saveChats();
+  renderChatList();
+}
+
+function togglePin(id) {
+  const chat = state.chats.find((c) => c.id === id);
+  if (!chat) return;
+  chat.pinned = !chat.pinned;
+  saveChats();
+  renderChatList();
 }
 function deleteChat(id) {
   state.chats = state.chats.filter((c) => c.id !== id);
@@ -453,6 +491,13 @@ function renderWelcome() {
   $("#messages").appendChild(w);
 }
 
+function chatMatches(chat, q) {
+  if (chat.title.toLowerCase().includes(q)) return true;
+  return chat.messages.some((m) => m.role === "user"
+    ? (m.text || "").toLowerCase().includes(q)
+    : JSON.stringify(m.answer || "").toLowerCase().includes(q));
+}
+
 function renderChatList() {
   const box = $("#sideHistory");
   if (!box) return;
@@ -461,14 +506,32 @@ function renderChatList() {
     box.innerHTML = '<div class="side-empty">Noch keine Gespräche.</div>';
     return;
   }
-  state.chats.forEach((chat) => {
+  const q = state.chatFilter.trim().toLowerCase();
+  const shown = q ? state.chats.filter((c) => chatMatches(c, q)) : state.chats;
+  if (!shown.length) {
+    box.innerHTML = '<div class="side-empty">Keine Treffer.</div>';
+    return;
+  }
+  // Angepinnte Gespräche zuerst (stabile Sortierung erhält die Reihenfolge)
+  const sorted = [...shown].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  sorted.forEach((chat) => {
     const row = document.createElement("div");
     row.className = "side-chat" + (chat.id === state.currentChatId ? " active" : "");
     const b = document.createElement("button");
     b.className = "side-item";
-    b.textContent = chat.title;
+    b.textContent = (chat.pinned ? "📌 " : "") + chat.title;
     b.title = chat.title;
     b.addEventListener("click", () => openChatById(chat.id));
+    const pin = document.createElement("button");
+    pin.className = "side-chat-x" + (chat.pinned ? " pinned" : "");
+    pin.textContent = "📌";
+    pin.title = chat.pinned ? "Lösen" : "Anpinnen";
+    pin.addEventListener("click", (e) => { e.stopPropagation(); togglePin(chat.id); });
+    const ren = document.createElement("button");
+    ren.className = "side-chat-x";
+    ren.textContent = "✎";
+    ren.title = "Umbenennen";
+    ren.addEventListener("click", (e) => { e.stopPropagation(); renameChat(chat.id); });
     const x = document.createElement("button");
     x.className = "side-chat-x";
     x.textContent = "✕";
@@ -478,12 +541,15 @@ function renderChatList() {
       if (confirm(`Gespräch „${chat.title}" löschen?`)) deleteChat(chat.id);
     });
     row.appendChild(b);
+    row.appendChild(pin);
+    row.appendChild(ren);
     row.appendChild(x);
     box.appendChild(row);
   });
 }
 
 function newChat() {
+  setTemporary(false);
   state.currentChatId = null;   // neues Gespräch beginnt beim nächsten Senden
   state.newsContext = "";
   state.pendingChatTitle = "";
@@ -495,6 +561,29 @@ function newChat() {
   renderChatList();
   showChat();
   $("#input").focus();
+}
+
+// Temporärer Chat (Inkognito): weder Verlauf noch Gedächtnis – nichts wird gespeichert
+function setTemporary(on) {
+  if (state.temporary === on) return;
+  state.temporary = on;
+  state.tempChat = on ? { messages: [] } : null;
+  const btn = $("#tempChatBtn");
+  if (btn) btn.classList.toggle("active", on);
+  const hint = document.querySelector(".composer-hint");
+  if (hint) hint.textContent = on ? HINT_TEMP : HINT_DEFAULT;
+}
+function toggleTemporary() {
+  const turnOn = !state.temporary;
+  setTemporary(turnOn);
+  state.currentChatId = null;
+  state.newsContext = "";
+  state.pendingChatTitle = "";
+  $("#messages").innerHTML = "";
+  renderWelcome();
+  renderChatList();
+  closeSidebar();
+  showChat();
 }
 
 function toggleSidebar() {
@@ -631,13 +720,14 @@ async function send() {
   autoGrow();
   $("#sendBtn").disabled = true;
 
-  // Gespräch anlegen oder fortführen
-  let chat = currentChat();
+  // Gespräch anlegen oder fortführen (im Temporär-Modus rein im Speicher)
+  let chat = activeChat();
   if (!chat) {
     chat = createChat(state.pendingChatTitle || question);
     state.pendingChatTitle = "";
-    $("#messages").innerHTML = "";   // Willkommens-Karte entfernen
   }
+  if (!chat.messages.length) $("#messages").innerHTML = "";   // Willkommens-Karte entfernen
+  removeRegenRow();
   // Verlauf für die KI: alle bisherigen Runden dieses Gesprächs
   const history = chat.messages.map((m) => m.role === "user"
     ? { role: "user", content: m.text }
@@ -645,7 +735,7 @@ async function send() {
 
   addUserMessage(question);
   chat.messages.push({ role: "user", text: question });
-  saveChats();
+  persistChats();
   const thinkingEl = addThinking();
 
   try {
@@ -657,7 +747,8 @@ async function send() {
     }
     renderAnswer(thinkingEl, answer, warnung);
     chat.messages.push({ role: "neuron", answer, warnung });
-    saveChats();
+    persistChats();
+    addRegenRow();
   } catch (e) {
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
     thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
@@ -670,6 +761,65 @@ async function send() {
 function scrollDown() {
   const m = $("#messages");
   m.scrollTop = m.scrollHeight;
+}
+
+// „Antwort neu generieren“ unter der letzten NEURON-Antwort
+function removeRegenRow() {
+  const row = $("#regenRow");
+  if (row) row.remove();
+}
+function addRegenRow() {
+  removeRegenRow();
+  const chat = activeChat();
+  if (!chat || !chat.messages.length) return;
+  if (chat.messages[chat.messages.length - 1].role !== "neuron") return;
+  const row = document.createElement("div");
+  row.id = "regenRow";
+  const btn = document.createElement("button");
+  btn.className = "btn-ghost small";
+  btn.textContent = "⟳ Antwort neu generieren";
+  btn.addEventListener("click", regenerate);
+  row.appendChild(btn);
+  $("#messages").appendChild(row);
+  scrollDown();
+}
+
+async function regenerate() {
+  const chat = activeChat();
+  if (!chat || !chat.messages.length) return;
+  if (chat.messages[chat.messages.length - 1].role === "neuron") chat.messages.pop();
+  const last = chat.messages[chat.messages.length - 1];
+  if (!last || last.role !== "user") return;
+  persistChats();
+
+  removeRegenRow();
+  const box = $("#messages");
+  if (box.lastElementChild && box.lastElementChild.classList.contains("msg-neuron")) {
+    box.lastElementChild.remove();
+  }
+
+  $("#sendBtn").disabled = true;
+  const history = chat.messages.slice(0, -1).map((m) => m.role === "user"
+    ? { role: "user", content: m.text }
+    : { role: "assistant", content: JSON.stringify(m.answer) });
+  const thinkingEl = addThinking();
+  try {
+    const { answer, warnung } = await getAnswer(last.text, history);
+    if (thinkingEl._timer) clearInterval(thinkingEl._timer);
+    if (!answer) {
+      thinkingEl.innerHTML = `<div class="warn">Es ist ein Fehler aufgetreten.</div>`;
+      return;
+    }
+    renderAnswer(thinkingEl, answer, warnung);
+    chat.messages.push({ role: "neuron", answer, warnung });
+    persistChats();
+    addRegenRow();
+  } catch (e) {
+    if (thinkingEl._timer) clearInterval(thinkingEl._timer);
+    thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
+  } finally {
+    $("#sendBtn").disabled = false;
+  }
 }
 
 function autoGrow() {
@@ -776,6 +926,9 @@ function init() {
   const nct = $("#newChatBtnTop"); if (nct) nct.addEventListener("click", newChat);
   const mb = $("#menuBtn"); if (mb) mb.addEventListener("click", toggleSidebar);
   const ov = $("#sidebarOverlay"); if (ov) ov.addEventListener("click", closeSidebar);
+  const tc = $("#tempChatBtn"); if (tc) tc.addEventListener("click", toggleTemporary);
+  const cs = $("#chatSearch");
+  if (cs) cs.addEventListener("input", () => { state.chatFilter = cs.value; renderChatList(); });
 
   // Navigation Chat ↔ News-Radar
   document.querySelectorAll("[data-nav]").forEach((b) => {
