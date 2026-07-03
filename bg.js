@@ -187,8 +187,9 @@
     const dt = Math.min(50, lastTs ? ts - lastTs : 16);
     lastTs = ts;
     // Energie gleitet weich zum Zielzustand; die Uhr läuft beim Denken
-    // schneller – kontinuierlich, ohne Phasensprung
-    energy += ((thinking ? 1 : 0) - energy) * 0.035;
+    // schneller – kontinuierlich, ohne Phasensprung. Das Abklingen ist
+    // bewusst deutlich langsamer als das Aufladen (sanftes Ausatmen).
+    energy += ((thinking ? 1 : 0) - energy) * (thinking ? 0.05 : 0.012);
     clock += dt * (1 + energy * 1.1);
     t = clock;
     step();

@@ -792,21 +792,34 @@ function renderAnswer(container, answer, warnung, fresh) {
   scrollDown();
 }
 
-// Frische Antworten entstehen nach und nach: die Abschnitte erscheinen
-// einer nach dem anderen und die Karte wächst dabei mit – wie abgearbeitet
-function revealAnswer(container) {
+// Frische Antworten entstehen Wort für Wort, wie bei ChatGPT/Claude:
+// Abschnitt für Abschnitt erscheinen, Fließtexte tippen sich herunter
+async function revealAnswer(container) {
   const card = container.querySelector(".answer");
   if (!card) return;
-  card.classList.add("arrive");
-  const sections = card.querySelectorAll(".answer-head, .section, .footer-note");
-  sections.forEach((el, i) => {
-    el.style.display = "none";
-    setTimeout(() => {
-      el.style.display = "";
-      el.style.animation = "msgIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both";
-      scrollDown();
-    }, 200 + i * 400);
-  });
+  const token = Math.random();
+  card._revealToken = token;
+  const blocks = [...card.querySelectorAll(".answer-head, .section, .footer-note")];
+  blocks.forEach((b) => { b.style.display = "none"; });
+  for (const b of blocks) {
+    if (!card.isConnected || card._revealToken !== token) return;
+    b.style.display = "";
+    b.style.animation = "msgIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both";
+    const texts = [...b.querySelectorAll("p, li")];
+    for (const el of texts) {
+      const full = el.textContent;
+      const words = full.split(" ");
+      el.textContent = "";
+      for (let i = 0; i < words.length; i++) {
+        if (!card.isConnected || card._revealToken !== token) { el.textContent = full; return; }
+        el.textContent += (i ? " " : "") + words[i];
+        if (i % 4 === 0) scrollDown();
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      el.textContent = full;
+    }
+    scrollDown();
+  }
 }
 
 // Belohnungs-Feedback am Senden-Knopf: Burst beim Absenden, ✓ bei Ankunft
