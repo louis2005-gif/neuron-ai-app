@@ -612,6 +612,7 @@ function addThinking() {
       <div>
         <div>NEURON arbeitet …</div>
         <div class="thinking-steps" id="thinkStep">Durchsuche Quellen im Internet</div>
+        <div class="think-bar"><div class="think-fill"></div></div>
       </div>
     </div>`;
   $("#messages").appendChild(el);
@@ -624,12 +625,18 @@ function addThinking() {
     "Erstelle realistische Einschätzung",
     "Formuliere Zusammenfassung & Feedback",
   ];
-  let i = 0;
+  // Vorfreude-Dramaturgie: Fortschritt wächst sichtbar, wird aber nie ganz
+  // fertig, bevor die echte Antwort eintrifft (Spannung statt Stillstand)
+  let i = 0, progress = 8;
+  const fill = el.querySelector(".think-fill");
   const timer = setInterval(() => {
     i = (i + 1) % steps.length;
     const s = el.querySelector("#thinkStep");
     if (s) s.textContent = steps[i];
+    progress = Math.min(90, progress + 9 + Math.random() * 9);
+    if (fill) fill.style.width = progress + "%";
   }, 1600);
+  if (fill) requestAnimationFrame(() => { fill.style.width = "14%"; });
   el._timer = timer;
   return el;
 }
@@ -649,6 +656,8 @@ function renderAnswer(container, answer, warnung) {
   if (a._unstrukturiert) {
     parts.push(`<div class="answer"><div class="section"><p>${esc(a.zusammenfassung)}</p></div></div>`);
     container.innerHTML = parts.join("");
+    const c0 = container.querySelector(".answer");
+    if (c0) c0.classList.add("arrive");
     scrollDown();
     return;
   }
@@ -708,7 +717,24 @@ function renderAnswer(container, answer, warnung) {
   parts.push(html);
 
   container.innerHTML = parts.join("");
+  // Ankunfts-Moment: die frische Antwort glüht kurz auf
+  const card = container.querySelector(".answer");
+  if (card) card.classList.add("arrive");
   scrollDown();
+}
+
+// Belohnungs-Feedback am Senden-Knopf: Burst beim Absenden, ✓ bei Ankunft
+function sendBurst() {
+  const btn = $("#sendBtn");
+  btn.classList.remove("burst");
+  void btn.offsetWidth; // Animation neu starten
+  btn.classList.add("burst");
+}
+function sendDone() {
+  const btn = $("#sendBtn");
+  btn.textContent = "✓";
+  sendBurst();
+  setTimeout(() => { btn.textContent = "➤"; }, 900);
 }
 
 async function send() {
@@ -718,6 +744,7 @@ async function send() {
 
   input.value = "";
   autoGrow();
+  sendBurst();
   $("#sendBtn").disabled = true;
 
   // Gespräch anlegen oder fortführen (im Temporär-Modus rein im Speicher)
@@ -749,6 +776,7 @@ async function send() {
     chat.messages.push({ role: "neuron", answer, warnung });
     persistChats();
     addRegenRow();
+    sendDone();
   } catch (e) {
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
     thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;

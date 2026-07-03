@@ -59,6 +59,19 @@ button, nav, .side-title, .brand { -webkit-user-select: none; user-select: none;
   0%, 100% { transform: scale(1); box-shadow: 0 0 44px rgba(229,64,47,.5), 0 0 70px rgba(109,40,217,.3); }
   50% { transform: scale(1.07); box-shadow: 0 0 60px rgba(229,64,47,.75), 0 0 100px rgba(109,40,217,.45); }
 }
+/* Dopamin-Momente: Senden-Burst, Ankunfts-Glühen, Denk-Fortschritt */
+@keyframes burst { 0% { transform: scale(1); } 35% { transform: scale(1.22); } 100% { transform: scale(1); } }
+@keyframes burstRing { from { box-shadow: 0 0 0 0 rgba(229, 64, 47, 0.55); } to { box-shadow: 0 0 0 28px rgba(229, 64, 47, 0); } }
+.send-btn.burst { animation: burst 0.45s cubic-bezier(0.34, 1.5, 0.4, 1), burstRing 0.6s ease-out; }
+@keyframes arriveGlow {
+  0% { }
+  30% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 50px rgba(0,0,0,0.55), 0 0 44px rgba(229,64,47,0.4), 0 0 90px rgba(109,40,217,0.28); }
+  100% { box-shadow: var(--card-shadow); }
+}
+.answer.arrive { animation: arriveGlow 1.5s ease-out 0.15s; }
+.think-bar { height: 3px; border-radius: 99px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin-top: 9px; width: 200px; max-width: 60vw; }
+.think-fill { height: 100%; width: 8%; border-radius: 99px; background: var(--grad-brand); transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
 }

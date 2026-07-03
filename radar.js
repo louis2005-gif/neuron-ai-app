@@ -490,7 +490,7 @@ const NeuronRadar = (() => {
           : s.trend < -5 ? `<span class="rt-down">▼ ${s.trend}%</span>`
           : `<span class="rt-flat">≈ ${s.trend >= 0 ? "+" : ""}${s.trend}%</span>`;
         body = `
-          <div class="radar-tile-count">${s.last24} ${trend}</div>
+          <div class="radar-tile-count"><span class="countup" data-n="${s.last24}">${s.last24}</span> ${trend}</div>
           <div class="radar-tile-label">Meldungen in 24 Std.</div>
           ${sparkline(s.perDay)}
           <div class="radar-tile-headline">${esc(entry.articles[0].title)}</div>`;
@@ -507,6 +507,7 @@ const NeuronRadar = (() => {
       });
       grid.appendChild(card);
     });
+    runCountUps(grid);
   }
 
   function addTopic(input, emoji) {
@@ -559,10 +560,11 @@ const NeuronRadar = (() => {
     document.querySelector("#radarDetailName").textContent = `${topic.emoji} ${topicName(topic)}`;
     const trendTxt = s.trend === Infinity ? "▲ neu" : s.trend === null ? "–" : `${s.trend > 0 ? "▲ +" : s.trend < 0 ? "▼ " : "≈ "}${s.trend}%`;
     document.querySelector("#radarStats").innerHTML = `
-      <div class="radar-stat"><b>${s.last24}</b><span>Meldungen · 24 Std.</span></div>
-      <div class="radar-stat"><b>${s.week}</b><span>Meldungen · 7 Tage</span></div>
+      <div class="radar-stat"><b class="countup" data-n="${s.last24}">${s.last24}</b><span>Meldungen · 24 Std.</span></div>
+      <div class="radar-stat"><b class="countup" data-n="${s.week}">${s.week}</b><span>Meldungen · 7 Tage</span></div>
       <div class="radar-stat"><b>${trendTxt}</b><span>Trend vs. Vortag</span></div>
-      <div class="radar-stat"><b>${s.sources}</b><span>Quellen</span></div>`;
+      <div class="radar-stat"><b class="countup" data-n="${s.sources}">${s.sources}</b><span>Quellen</span></div>`;
+    runCountUps(document.querySelector("#radarStats"));
 
     document.querySelector("#radarAutoSummary").textContent = articles.length
       ? autoSummary(topicName(topic), s, an, articles.length)
@@ -640,6 +642,23 @@ const NeuronRadar = (() => {
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // Zahlen ticken sichtbar hoch (Dopamin-Detail wie bei Fintech-Apps)
+  function runCountUps(root) {
+    if (!root) return;
+    root.querySelectorAll(".countup").forEach((el) => {
+      const target = parseInt(el.dataset.n, 10) || 0;
+      if (target <= 0) return;
+      const dur = 700, start = performance.now();
+      const tick = (now) => {
+        const k = Math.min(1, (now - start) / dur);
+        const e = 1 - Math.pow(1 - k, 3);
+        el.textContent = String(Math.round(target * e));
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
   }
 
   // ---------------------------------------------------------------------------
