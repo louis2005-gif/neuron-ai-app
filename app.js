@@ -927,6 +927,8 @@ function init() {
   const mb = $("#menuBtn"); if (mb) mb.addEventListener("click", toggleSidebar);
   const ov = $("#sidebarOverlay"); if (ov) ov.addEventListener("click", closeSidebar);
   const tc = $("#tempChatBtn"); if (tc) tc.addEventListener("click", toggleTemporary);
+  const tn = $("#tabNewBtn"); if (tn) tn.addEventListener("click", () => { if (localStorage.getItem(LS_ONBOARDED)) newChat(); });
+  const ts = $("#tabSettingsBtn"); if (ts) ts.addEventListener("click", openSettings);
   const cs = $("#chatSearch");
   if (cs) cs.addEventListener("input", () => { state.chatFilter = cs.value; renderChatList(); });
 

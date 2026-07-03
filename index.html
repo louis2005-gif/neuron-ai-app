@@ -59,7 +59,6 @@
         <button id="menuBtn" class="icon-btn only-mobile" aria-label="Menü">☰</button>
         <div class="main-title"><span class="mt-name">NEURON<span>AI</span></span></div>
         <div class="head-actions">
-          <button id="newChatBtnTop" class="icon-btn only-mobile" aria-label="Neue Frage">＋</button>
           <button id="tempChatBtn" class="icon-btn" aria-label="Temporäres Gespräch" title="Temporäres Gespräch – wird nicht gespeichert">🕶</button>
           <button id="settingsBtn" class="icon-btn" aria-label="Einstellungen">⚙</button>
         </div>
@@ -169,6 +168,14 @@
         <button id="radarAddBtn" class="radar-fab" title="Thema hinzufügen">＋</button>
       </section>
     </main>
+
+    <!-- Mobile Tab-Bar (echte App-Navigation) -->
+    <nav class="tabbar" aria-label="Navigation">
+      <button data-nav="chat" class="tab-btn active"><span class="tab-ico">💬</span><span>NEURON</span></button>
+      <button data-nav="radar" class="tab-btn"><span class="tab-ico">📡</span><span>Radar</span></button>
+      <button id="tabNewBtn" class="tab-btn"><span class="tab-ico">＋</span><span>Neu</span></button>
+      <button id="tabSettingsBtn" class="tab-btn"><span class="tab-ico">⚙</span><span>Mehr</span></button>
+    </nav>
   </div>
 
   <!-- Thema hinzufügen -->
