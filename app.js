@@ -24,6 +24,8 @@ let state = {
   temporary: false,          // Temporärer Chat: nichts wird gespeichert
   tempChat: null,
   chatFilter: "",            // Suchtext für die Gesprächsliste
+  generating: false,         // läuft gerade eine Antwort?
+  abortCtrl: null,           // zum Abbrechen der laufenden Antwort
 };
 
 // ---------------------------------------------------------------------------
@@ -73,19 +75,7 @@ function openChatById(id) {
   if (!chat) return;
   setTemporary(false);
   state.currentChatId = id;
-  const box = $("#messages");
-  box.innerHTML = "";
-  chat.messages.forEach((m) => {
-    if (m.role === "user") {
-      addUserMessage(m.text);
-    } else {
-      const el = document.createElement("div");
-      el.className = "msg-neuron";
-      $("#messages").appendChild(el);
-      renderAnswer(el, m.answer, m.warnung);
-    }
-  });
-  addRegenRow();
+  renderChatMessages(chat);
   renderChatList();
   closeSidebar();
   showChat();
@@ -225,7 +215,7 @@ function parseMindlessJson(text) {
 }
 
 // Direkter Anthropic-Aufruf aus dem Browser (mit Websuche und Gesprächsverlauf)
-async function callAnthropicDirect(apiKey, question, profile, history) {
+async function callAnthropicDirect(apiKey, question, profile, history, signal) {
   let system = buildSystemPrompt(profile);
   // Vom News-Radar übergebener Kontext (aktuelle Schlagzeilen zum Thema)
   if (state.newsContext) {
@@ -243,6 +233,7 @@ async function callAnthropicDirect(apiKey, question, profile, history) {
   for (let i = 0; i < 4; i++) {
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
+      signal,
       headers: {
         "content-type": "application/json",
         "x-api-key": apiKey,
@@ -324,11 +315,12 @@ function demoAnswer(question) {
 }
 
 // Zentrale Antwortbeschaffung: Backend (falls vorhanden) → sonst direkt/DEMO
-async function getAnswer(question, history) {
+async function getAnswer(question, history, signal) {
   // 1) Optionales Node-Backend versuchen (server.js). Schlägt still fehl, wenn es nicht läuft.
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
+      signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ question, profile: state.profile, apiKey: state.apiKey, history }),
     });
@@ -339,14 +331,18 @@ async function getAnswer(question, history) {
         if (data && data.answer) return { answer: data.answer, warnung: data.warnung };
       }
     }
-  } catch (_) { /* kein Backend – weiter mit Browser-Modus */ }
+  } catch (e) {
+    if (e && e.name === "AbortError") throw e;   // Nutzer hat abgebrochen
+    /* kein Backend – weiter mit Browser-Modus */
+  }
 
   // 2) Browser-Modus
   if (state.apiKey) {
     try {
-      const answer = await callAnthropicDirect(state.apiKey, question, state.profile, history);
+      const answer = await callAnthropicDirect(state.apiKey, question, state.profile, history, signal);
       if (answer) return { answer };
     } catch (e) {
+      if (e && e.name === "AbortError") throw e;   // Nutzer hat abgebrochen
       return { answer: demoAnswer(question), warnung: "Live-Recherche fehlgeschlagen (" + e.message + "). Es folgt der DEMO-Ablauf. Prüfe deinen API-Key." };
     }
   }
@@ -595,11 +591,88 @@ function closeSidebar() {
 }
 
 function addUserMessage(text) {
+  const wrap = document.createElement("div");
+  wrap.className = "msg-user-wrap";
   const el = document.createElement("div");
   el.className = "msg-user";
   el.textContent = text;
-  $("#messages").appendChild(el);
+  // Nachträgliche Aktionen: Kopieren und Bearbeiten (erst nach dem Senden da)
+  const actions = document.createElement("div");
+  actions.className = "msg-actions";
+  const cp = document.createElement("button");
+  cp.className = "msg-action";
+  cp.title = "Kopieren";
+  cp.textContent = "⧉ Kopieren";
+  cp.addEventListener("click", async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; }
+    catch {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand("copy"); } catch {}
+      ta.remove();
+    }
+    cp.textContent = ok ? "✓ Kopiert" : "⧉ Kopieren";
+    setTimeout(() => { cp.textContent = "⧉ Kopieren"; }, 1400);
+  });
+  const ed = document.createElement("button");
+  ed.className = "msg-action";
+  ed.title = "Bearbeiten und neu senden";
+  ed.textContent = "✎ Bearbeiten";
+  ed.addEventListener("click", () => editUserMessage(wrap, text));
+  actions.appendChild(cp);
+  actions.appendChild(ed);
+  wrap.appendChild(el);
+  wrap.appendChild(actions);
+  $("#messages").appendChild(wrap);
   scrollDown();
+}
+
+// Nachricht nachträglich bearbeiten: Text zurück ins Eingabefeld,
+// das Gespräch wird ab dieser Stelle zurückgesetzt (wie bei ChatGPT)
+function editUserMessage(wrap, text) {
+  if (state.generating) return;
+  const chat = activeChat();
+  if (!chat) return;
+  const wraps = [...document.querySelectorAll("#messages .msg-user-wrap")];
+  const nth = wraps.indexOf(wrap);
+  if (nth === -1) return;
+  let count = -1, idx = -1;
+  for (let i = 0; i < chat.messages.length; i++) {
+    if (chat.messages[i].role === "user") {
+      count++;
+      if (count === nth) { idx = i; break; }
+    }
+  }
+  if (idx === -1) return;
+  if (idx < chat.messages.length - 1) {
+    if (!confirm("Nachricht bearbeiten? Alles ab dieser Nachricht wird aus dem Gespräch entfernt.")) return;
+  }
+  chat.messages = chat.messages.slice(0, idx);
+  persistChats();
+  renderChatMessages(chat);
+  $("#input").value = text;
+  autoGrow();
+  $("#input").focus();
+}
+
+// Gesamten Gesprächsverlauf neu in die Chat-Fläche zeichnen
+function renderChatMessages(chat) {
+  const box = $("#messages");
+  box.innerHTML = "";
+  if (!chat.messages.length) { renderWelcome(); return; }
+  chat.messages.forEach((m) => {
+    if (m.role === "user") {
+      addUserMessage(m.text);
+    } else {
+      const el = document.createElement("div");
+      el.className = "msg-neuron";
+      box.appendChild(el);
+      renderAnswer(el, m.answer, m.warnung);
+    }
+  });
+  addRegenRow();
 }
 
 function addThinking() {
@@ -736,7 +809,20 @@ function sendDone() {
   setTimeout(() => { btn.textContent = "➤"; }, 900);
 }
 
+// Senden-Knopf in den Stopp-Modus (■) bzw. zurück in den Sende-Modus schalten
+function setStopMode(on) {
+  const b = $("#sendBtn");
+  b.classList.toggle("stop", on);
+  b.title = on ? "Antwort abbrechen" : "Senden";
+  if (on) b.textContent = "■";
+  else if (b.textContent === "■") b.textContent = "➤";
+}
+function cancelGeneration() {
+  if (state.abortCtrl) state.abortCtrl.abort();
+}
+
 async function send() {
+  if (state.generating) return;
   const input = $("#input");
   const question = input.value.trim();
   if (!question) return;
@@ -744,13 +830,17 @@ async function send() {
   input.value = "";
   autoGrow();
   sendBurst();
-  $("#sendBtn").disabled = true;
+  state.generating = true;
+  state.abortCtrl = new AbortController();
+  setStopMode(true);
 
   // Gespräch anlegen oder fortführen (im Temporär-Modus rein im Speicher)
   let chat = activeChat();
+  let createdNew = false;
   if (!chat) {
     chat = createChat(state.pendingChatTitle || question);
     state.pendingChatTitle = "";
+    createdNew = true;
   }
   if (!chat.messages.length) $("#messages").innerHTML = "";   // Willkommens-Karte entfernen
   removeRegenRow();
@@ -765,7 +855,7 @@ async function send() {
   const thinkingEl = addThinking();
 
   try {
-    const { answer, warnung } = await getAnswer(question, history);
+    const { answer, warnung } = await getAnswer(question, history, state.abortCtrl.signal);
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
     stopThinkingFx();
     if (!answer) {
@@ -780,8 +870,28 @@ async function send() {
   } catch (e) {
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
     stopThinkingFx();
-    thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
+    if (e && e.name === "AbortError") {
+      // Vom Nutzer abgebrochen: Frage zurück ins Eingabefeld zum Umformulieren
+      thinkingEl.remove();
+      const wraps = document.querySelectorAll("#messages .msg-user-wrap");
+      if (wraps.length) wraps[wraps.length - 1].remove();
+      if (chat.messages.length && chat.messages[chat.messages.length - 1].role === "user") chat.messages.pop();
+      if (createdNew && !chat.messages.length && !state.temporary) {
+        state.chats = state.chats.filter((c) => c.id !== chat.id);
+        state.currentChatId = null;
+        renderChatList();
+      }
+      persistChats();
+      if (!$("#messages").children.length) renderWelcome();
+      input.value = question;
+      autoGrow();
+    } else {
+      thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
+    }
   } finally {
+    state.generating = false;
+    state.abortCtrl = null;
+    setStopMode(false);
     $("#sendBtn").disabled = false;
     input.focus();
   }
@@ -814,6 +924,7 @@ function addRegenRow() {
 }
 
 async function regenerate() {
+  if (state.generating) return;
   const chat = activeChat();
   if (!chat || !chat.messages.length) return;
   if (chat.messages[chat.messages.length - 1].role === "neuron") chat.messages.pop();
@@ -827,13 +938,15 @@ async function regenerate() {
     box.lastElementChild.remove();
   }
 
-  $("#sendBtn").disabled = true;
+  state.generating = true;
+  state.abortCtrl = new AbortController();
+  setStopMode(true);
   const history = chat.messages.slice(0, -1).map((m) => m.role === "user"
     ? { role: "user", content: m.text }
     : { role: "assistant", content: JSON.stringify(m.answer) });
   const thinkingEl = addThinking();
   try {
-    const { answer, warnung } = await getAnswer(last.text, history);
+    const { answer, warnung } = await getAnswer(last.text, history, state.abortCtrl.signal);
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
     stopThinkingFx();
     if (!answer) {
@@ -847,8 +960,17 @@ async function regenerate() {
   } catch (e) {
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
     stopThinkingFx();
-    thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
+    if (e && e.name === "AbortError") {
+      // Abgebrochen: zurück zum Zustand mit „Neu generieren“-Knopf
+      thinkingEl.remove();
+      addRegenRow();
+    } else {
+      thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
+    }
   } finally {
+    state.generating = false;
+    state.abortCtrl = null;
+    setStopMode(false);
     $("#sendBtn").disabled = false;
   }
 }
@@ -929,7 +1051,10 @@ function initBackground() {
 // ---------------------------------------------------------------------------
 function init() {
   // Events
-  $("#sendBtn").addEventListener("click", send);
+  $("#sendBtn").addEventListener("click", () => {
+    if (state.generating) cancelGeneration();
+    else send();
+  });
   $("#input").addEventListener("input", autoGrow);
   $("#input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {

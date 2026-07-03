@@ -230,6 +230,15 @@ body::before {
   animation: msgIn 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .msg-neuron { align-self: stretch; animation: msgIn 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.msg-user-wrap { align-self: flex-end; max-width: 640px !important; margin-right: 0 !important; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.msg-actions { display: flex; gap: 2px; }
+.msg-action {
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+  font-size: 11.5px; padding: 3px 8px; border-radius: 8px; font-family: inherit;
+  opacity: 0.55; transition: opacity 0.12s, background 0.12s;
+}
+.msg-action:hover { opacity: 1; color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.msg-action:active { transform: scale(0.95); }
 .welcome { color: var(--muted); text-align: center; padding: 8vh 16px; line-height: 1.7; font-size: 16px; }
 .welcome b { color: var(--text); }
 .welcome .welcome-logo { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 18px; background: radial-gradient(circle at 30% 30%, var(--accent-hi), var(--accent-2) 60%, var(--violet-deep) 105%); animation: orbPulse 3.8s ease-in-out infinite; }
@@ -296,6 +305,8 @@ body::before {
 .send-btn:hover { filter: brightness(1.08); }
 .send-btn:active { transform: scale(0.94); }
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Stopp-Modus: während NEURON arbeitet, wird Senden zu Abbrechen */
+.send-btn.stop { background: rgba(255, 255, 255, 0.1); border: 1px solid var(--line); color: var(--text); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); }
 .composer-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 10px; }
 
 /* Denk-Indikator: bewusst ohne Leiste und Ladekreis – das Netz im
