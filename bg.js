@@ -26,17 +26,17 @@
     const count = Math.max(70, Math.min(230, Math.round(((W * H) / 6200) * intensity)));
     return {
       count,
-      flow: 0.5 * intensity,       // Strömungsgeschwindigkeit des Flusses (nach rechts)
       linkDist: Math.min(190, Math.max(120, Math.sqrt((W * H) / count) * 1.55)),
     };
   }
 
-  // Mittellinie des Flusses: eine sich langsam verschiebende Welle,
-  // die sich von links nach rechts durchs ganze Bild zieht
-  function riverY(x, tt) {
+  // Mittellinie des Flusses: eine FESTE Welle durchs Bild – der Fluss
+  // bleibt an seiner Stelle, nur die Knoten atmen darin
+  function riverY(x) {
+    const u = x / Math.max(W, 1); // 0 = linker Rand, 1 = rechter Rand
     return H * (0.5
-      + 0.27 * Math.sin(x * 0.0035 + tt * 1.6)
-      + 0.12 * Math.sin(x * 0.0011 - tt * 1.1));
+      + 0.30 * Math.sin(u * 2.6 - 1.3)
+      + 0.10 * Math.sin(u * 6.5 + 1.0));
   }
 
   function paint(n) {
@@ -44,24 +44,27 @@
     n.kind = r < 0.16 ? "red" : r < 0.26 ? "blue" : "gray";
     n.r = n.kind === "gray" ? rand(1.3, 2.4) : rand(2.2, 4.2);
     n.ph = rand(0, Math.PI * 2);
-    n.drift = rand(0.55, 1.5);
+    n.ph2 = rand(0, Math.PI * 2);
     // Lage quer zum Fluss: zur Mitte hin verdichtet → enge Cluster im Kern,
     // lockere Ausläufer am Rand (wie im Referenzbild)
     n.off = (Math.random() + Math.random() + Math.random()) / 1.5 - 1;
-    n.wob = rand(2, 7); // individuelles Auf-und-ab im Strom
+    n.amp = rand(3, 9); // Größe der langsamen Eigenbewegung um den Ankerpunkt
   }
 
-  function spawn(n, fromLeft) {
-    n.x = fromLeft ? rand(-80, -10) : rand(0, W);
+  function spawn(n) {
     paint(n);
-    n.y = riverY(n.x, t * 0.00012) + n.off * H * 0.17;
+    // Fester Ankerpunkt im Flussbett – hier bleibt der Knoten dauerhaft
+    n.ax = rand(-30, W + 30);
+    n.ay = riverY(n.ax) + n.off * H * 0.17;
+    n.x = n.ax;
+    n.y = n.ay;
     return n;
   }
 
   function initNodes() {
     const c = config();
     nodes = [];
-    for (let i = 0; i < c.count; i++) nodes.push(spawn({}, false));
+    for (let i = 0; i < c.count; i++) nodes.push(spawn({}));
   }
 
   function resize() {
@@ -77,15 +80,12 @@
   }
 
   function update() {
-    const c = config();
-    const tt = t * 0.00012;
-    const band = H * 0.17;         // halbe Breite des Flussbetts
+    // Der Fluss bleibt an seiner Stelle. Jeder Knoten atmet ganz langsam um
+    // seinen Ankerpunkt; die Phase wandert entlang des Flusses, sodass eine
+    // sanfte Welle hindurchläuft – es fließt, ohne zu wandern.
     for (const n of nodes) {
-      // Alles strömt nach rechts; die Höhe folgt der wandernden Flusslinie
-      n.x += c.flow * n.drift;
-      const wobble = Math.sin(t * 0.0011 + n.ph) * n.wob;
-      n.y = riverY(n.x, tt) + n.off * band + wobble;
-      if (n.x > W + 40) spawn(n, true);
+      n.x = n.ax + Math.sin(t * 0.00042 + n.ph) * n.amp;
+      n.y = n.ay + Math.sin(t * 0.00052 + n.ph2 + n.ax * 0.006) * n.amp * 0.9;
     }
   }
 
