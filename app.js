@@ -486,8 +486,7 @@ function renderWelcome() {
   w.className = "welcome msg-neuron";
   w.innerHTML =
     '<div class="welcome-logo"></div>' +
-    "<h2>Womit kann NEURON dir helfen?</h2>" +
-    "Stell eine Frage. NEURON <b>recherchiert</b>, bewertet die <b>Quellen</b>, stellt <b>Pro</b> und <b>Contra</b> gegenüber und gibt dir eine ehrliche <b>Einschätzung</b> – damit <b>du</b> entscheidest.";
+    "<h2>Womit kann NEURON dir helfen?</h2>";
   $("#messages").appendChild(w);
 }
 
