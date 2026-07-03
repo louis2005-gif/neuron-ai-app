@@ -7,12 +7,12 @@
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
 
-  const RED = "229,64,47";       // Crimson (Markenfarbe)
-  const RED_DEEP = "200,16,46";
-  const BLUE = "47,111,229";     // Akzent-Blau
-  const BLUE_DEEP = "29,78,178";
-  const GRAY = "58,63,71";       // Anthrazit-Grau für Knoten
-  const LINE = "60,65,75";       // Linien-Grau
+  const RED = "255,74,56";       // Crimson-Glühen (Markenfarbe)
+  const RED_DEEP = "229,44,32";
+  const BLUE = "82,140,255";     // elektrisches Akzent-Blau
+  const BLUE_DEEP = "56,108,224";
+  const GRAY = "190,196,208";    // helle Knoten auf Schwarz
+  const LINE = "200,206,218";    // feine helle Linien
 
   let W = 0, H = 0, DPR = 1;
   let nodes = [];
@@ -109,10 +109,11 @@
         if (d > c.linkDist) continue;
         const near = 1 - d / c.linkDist;             // 1 = ganz nah, 0 = an der Kante
         const pulse = 0.65 + 0.35 * Math.sin(t * 0.0021 + a.ph + b.ph);
-        const alpha = (0.08 + near * 0.42) * pulse * Math.min(1.2, intensity);
         const colored = a.kind !== "gray" || b.kind !== "gray";
+        // Farbige Verbindungen glühen kräftig, graue bleiben hauchfein
+        const alpha = ((colored ? 0.1 : 0.04) + near * (colored ? 0.4 : 0.14)) * pulse * Math.min(1.2, intensity);
         ctx.strokeStyle = linkColor(a, b, alpha);
-        ctx.lineWidth = (colored ? 0.7 : 0.5) + near * (colored ? 1.2 : 0.7);
+        ctx.lineWidth = (colored ? 0.7 : 0.5) + near * (colored ? 1.2 : 0.6);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
@@ -120,10 +121,11 @@
       }
     }
 
-    // Knoten: grau matt; rot und blau mit weichem Puls-Glühen
+    // Knoten: grau dezent; rot und blau als glühende Lichtquellen (Bloom
+    // durch additives Mischen – wie Licht auf schwarzem Lack)
     for (const n of nodes) {
       if (n.kind === "gray") {
-        ctx.fillStyle = `rgba(${GRAY},0.72)`;
+        ctx.fillStyle = `rgba(${GRAY},0.5)`;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
         ctx.fill();
@@ -132,15 +134,17 @@
       const col = n.kind === "red" ? RED : BLUE;
       const deep = n.kind === "red" ? RED_DEEP : BLUE_DEEP;
       const p = 0.6 + 0.4 * Math.sin(t * 0.0014 + n.ph);
-      const R = n.r * (3.2 + p * 1.8);
+      const R = n.r * (3.8 + p * 2.2);
+      ctx.globalCompositeOperation = "lighter";
       const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, R);
-      g.addColorStop(0, `rgba(${col},${0.34 * p})`);
+      g.addColorStop(0, `rgba(${col},${0.4 * p})`);
       g.addColorStop(1, `rgba(${col},0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(n.x, n.y, R, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = `rgba(${deep},${0.75 + 0.25 * p})`;
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = `rgba(${deep},${0.8 + 0.2 * p})`;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r * (0.95 + 0.15 * p), 0, Math.PI * 2);
       ctx.fill();
