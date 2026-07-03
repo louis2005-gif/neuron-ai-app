@@ -21,6 +21,9 @@
   let W = 0, H = 0, DPR = 1;
   let nodes = [];
   let raf = null, running = false, t = 0, intensity = 1;
+  // Denk-Modus: das Netz selbst ist die Ladeanzeige – es pulsiert stärker
+  // und eine Energiewelle lädt es von links nach rechts auf
+  let thinking = false, charge = 0;
 
   const media = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   const prefersReduced = () => Boolean(media && media.matches);
@@ -87,10 +90,21 @@
     // Der Fluss bleibt an seiner Stelle. Jeder Knoten atmet ganz langsam um
     // seinen Ankerpunkt; die Phase wandert entlang des Flusses, sodass eine
     // sanfte Welle hindurchläuft – es fließt, ohne zu wandern.
+    const speed = thinking ? 2.2 : 1;   // beim Denken lebt das Netz sichtbar auf
     for (const n of nodes) {
-      n.x = n.ax + Math.sin(t * 0.00042 + n.ph) * n.amp;
-      n.y = n.ay + Math.sin(t * 0.00052 + n.ph2 + n.ax * 0.006) * n.amp * 0.9;
+      n.x = n.ax + Math.sin(t * 0.00042 * speed + n.ph) * n.amp;
+      n.y = n.ay + Math.sin(t * 0.00052 * speed + n.ph2 + n.ax * 0.006) * n.amp * 0.9;
     }
+    if (thinking) charge = (charge + 0.005) % 1.2;   // Ladewelle wandert, dann von vorn
+  }
+
+  // Wie stark ein Punkt gerade von der Ladewelle erfasst ist (0 = ruhig)
+  function boostFor(x) {
+    if (!thinking) return 0;
+    const frontX = charge * (W + 260) - 130;
+    const d = frontX - x;
+    if (d < 0) return 0;
+    return 0.35 + Math.exp(-Math.pow(d / 140, 2)) * 1.25;
   }
 
   function linkColor(a, b, alpha) {
@@ -116,12 +130,13 @@
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d > c.linkDist) continue;
         const near = 1 - d / c.linkDist;             // 1 = ganz nah, 0 = an der Kante
-        const pulse = 0.65 + 0.35 * Math.sin(t * 0.0021 + a.ph + b.ph);
+        const pulse = 0.65 + 0.35 * Math.sin(t * (thinking ? 0.0042 : 0.0021) + a.ph + b.ph);
         const colored = a.kind !== "gray" || b.kind !== "gray";
+        const boost = (boostFor(a.x) + boostFor(b.x)) / 2;
         // Farbige Verbindungen glühen kräftig, graue bleiben hauchfein
-        const alpha = ((colored ? 0.1 : 0.04) + near * (colored ? 0.4 : 0.14)) * pulse * Math.min(1.2, intensity);
+        const alpha = Math.min(0.85, ((colored ? 0.1 : 0.04) + near * (colored ? 0.4 : 0.14)) * pulse * Math.min(1.2, intensity) * (1 + boost * 1.6));
         ctx.strokeStyle = linkColor(a, b, alpha);
-        ctx.lineWidth = (colored ? 0.7 : 0.5) + near * (colored ? 1.2 : 0.6);
+        ctx.lineWidth = (colored ? 0.7 : 0.5) + near * (colored ? 1.2 : 0.6) + boost * 0.5;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
@@ -132,20 +147,21 @@
     // Knoten: grau dezent; rot und blau als glühende Lichtquellen (Bloom
     // durch additives Mischen – wie Licht auf schwarzem Lack)
     for (const n of nodes) {
+      const boost = boostFor(n.x);
       if (n.kind === "gray") {
-        ctx.fillStyle = `rgba(${GRAY},0.5)`;
+        ctx.fillStyle = `rgba(${GRAY},${Math.min(0.95, 0.5 + boost * 0.35)})`;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, n.r * (1 + boost * 0.25), 0, Math.PI * 2);
         ctx.fill();
         continue;
       }
       const col = NODE_COL[n.kind];
       const deep = NODE_DEEP[n.kind];
-      const p = 0.6 + 0.4 * Math.sin(t * 0.0014 + n.ph);
-      const R = n.r * (3.8 + p * 2.2);
+      const p = 0.6 + 0.4 * Math.sin(t * (thinking ? 0.0032 : 0.0014) + n.ph);
+      const R = n.r * (3.8 + p * 2.2) * (1 + boost * 0.45);
       ctx.globalCompositeOperation = "lighter";
       const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, R);
-      g.addColorStop(0, `rgba(${col},${0.4 * p})`);
+      g.addColorStop(0, `rgba(${col},${Math.min(0.8, 0.4 * p * (1 + boost))})`);
       g.addColorStop(1, `rgba(${col},0)`);
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -200,5 +216,7 @@
       canvas.style.display = on ? "block" : "none";
       if (on) start(); else stop();
     },
+    // Denk-Modus an/aus: Netz pulsiert stärker + Ladewelle von links nach rechts
+    think(on) { thinking = Boolean(on); if (!thinking) charge = 0; },
   };
 })();

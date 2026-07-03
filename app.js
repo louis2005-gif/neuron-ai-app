@@ -608,15 +608,17 @@ function addThinking() {
   el.className = "msg-neuron";
   el.innerHTML = `
     <div class="thinking">
-      <div class="spinner"></div>
       <div>
-        <div>NEURON arbeitet …</div>
+        <div class="think-title">NEURON arbeitet …</div>
         <div class="thinking-steps" id="thinkStep">Durchsuche Quellen im Internet</div>
-        <div class="think-bar"><div class="think-fill"></div></div>
       </div>
     </div>`;
   $("#messages").appendChild(el);
   scrollDown();
+
+  // Keine Leiste, kein Ladekreis: das neuronale Netz im Hintergrund IST die
+  // Ladeanzeige – es pulsiert stärker und lädt sich von links nach rechts auf
+  if (window.NeuronBG) NeuronBG.think(true);
 
   const steps = [
     "Durchsuche Quellen im Internet",
@@ -625,20 +627,18 @@ function addThinking() {
     "Erstelle realistische Einschätzung",
     "Formuliere Zusammenfassung & Feedback",
   ];
-  // Vorfreude-Dramaturgie: Fortschritt wächst sichtbar, wird aber nie ganz
-  // fertig, bevor die echte Antwort eintrifft (Spannung statt Stillstand)
-  let i = 0, progress = 8;
-  const fill = el.querySelector(".think-fill");
+  let i = 0;
   const timer = setInterval(() => {
     i = (i + 1) % steps.length;
     const s = el.querySelector("#thinkStep");
     if (s) s.textContent = steps[i];
-    progress = Math.min(90, progress + 9 + Math.random() * 9);
-    if (fill) fill.style.width = progress + "%";
   }, 1600);
-  if (fill) requestAnimationFrame(() => { fill.style.width = "14%"; });
   el._timer = timer;
   return el;
+}
+
+function stopThinkingFx() {
+  if (window.NeuronBG) NeuronBG.think(false);
 }
 
 function esc(s) {
@@ -768,6 +768,7 @@ async function send() {
   try {
     const { answer, warnung } = await getAnswer(question, history);
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
+    stopThinkingFx();
     if (!answer) {
       thinkingEl.innerHTML = `<div class="warn">Es ist ein Fehler aufgetreten.</div>`;
       return;
@@ -779,6 +780,7 @@ async function send() {
     sendDone();
   } catch (e) {
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
+    stopThinkingFx();
     thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
   } finally {
     $("#sendBtn").disabled = false;
@@ -834,6 +836,7 @@ async function regenerate() {
   try {
     const { answer, warnung } = await getAnswer(last.text, history);
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
+    stopThinkingFx();
     if (!answer) {
       thinkingEl.innerHTML = `<div class="warn">Es ist ein Fehler aufgetreten.</div>`;
       return;
@@ -844,6 +847,7 @@ async function regenerate() {
     addRegenRow();
   } catch (e) {
     if (thinkingEl._timer) clearInterval(thinkingEl._timer);
+    stopThinkingFx();
     thinkingEl.innerHTML = `<div class="warn">Unerwarteter Fehler: ${esc(e.message)}</div>`;
   } finally {
     $("#sendBtn").disabled = false;
