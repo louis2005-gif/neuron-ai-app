@@ -9,10 +9,14 @@
 
   const RED = "255,74,56";       // Crimson-Glühen (Markenfarbe)
   const RED_DEEP = "229,44,32";
+  const VIOLET = "168,85,247";   // tiefes Lila – die Brücke zwischen Rot und Blau
+  const VIOLET_DEEP = "124,44,214";
   const BLUE = "82,140,255";     // elektrisches Akzent-Blau
   const BLUE_DEEP = "56,108,224";
   const GRAY = "190,196,208";    // helle Knoten auf Schwarz
   const LINE = "200,206,218";    // feine helle Linien
+  const NODE_COL = { red: RED, violet: VIOLET, blue: BLUE };
+  const NODE_DEEP = { red: RED_DEEP, violet: VIOLET_DEEP, blue: BLUE_DEEP };
 
   let W = 0, H = 0, DPR = 1;
   let nodes = [];
@@ -41,7 +45,7 @@
 
   function paint(n) {
     const r = Math.random();
-    n.kind = r < 0.16 ? "red" : r < 0.26 ? "blue" : "gray";
+    n.kind = r < 0.14 ? "red" : r < 0.24 ? "violet" : r < 0.33 ? "blue" : "gray";
     n.r = n.kind === "gray" ? rand(1.3, 2.4) : rand(2.2, 4.2);
     n.ph = rand(0, Math.PI * 2);
     n.ph2 = rand(0, Math.PI * 2);
@@ -90,8 +94,12 @@
   }
 
   function linkColor(a, b, alpha) {
-    if (a.kind === "red" || b.kind === "red") return `rgba(${RED},${alpha})`;
-    if (a.kind === "blue" || b.kind === "blue") return `rgba(${BLUE},${alpha})`;
+    const k = a.kind, l = b.kind;
+    // Rot trifft Blau → die Verbindung glüht violett (Lila lebt ZWISCHEN den Farben)
+    if ((k === "red" && l === "blue") || (k === "blue" && l === "red")) return `rgba(${VIOLET},${alpha})`;
+    if (k === "violet" || l === "violet") return `rgba(${VIOLET},${alpha})`;
+    if (k === "red" || l === "red") return `rgba(${RED},${alpha})`;
+    if (k === "blue" || l === "blue") return `rgba(${BLUE},${alpha})`;
     return `rgba(${LINE},${alpha * 0.7})`;
   }
 
@@ -131,8 +139,8 @@
         ctx.fill();
         continue;
       }
-      const col = n.kind === "red" ? RED : BLUE;
-      const deep = n.kind === "red" ? RED_DEEP : BLUE_DEEP;
+      const col = NODE_COL[n.kind];
+      const deep = NODE_DEEP[n.kind];
       const p = 0.6 + 0.4 * Math.sin(t * 0.0014 + n.ph);
       const R = n.r * (3.8 + p * 2.2);
       ctx.globalCompositeOperation = "lighter";
