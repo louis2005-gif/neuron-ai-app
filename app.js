@@ -717,7 +717,7 @@ function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-function renderAnswer(container, answer, warnung) {
+function renderAnswer(container, answer, warnung, fresh) {
   const a = answer || {};
   const ev = (a.evidenz || "mittel").toLowerCase();
   const parts = [];
@@ -728,8 +728,7 @@ function renderAnswer(container, answer, warnung) {
   if (a._unstrukturiert) {
     parts.push(`<div class="answer"><div class="section"><p>${esc(a.zusammenfassung)}</p></div></div>`);
     container.innerHTML = parts.join("");
-    const c0 = container.querySelector(".answer");
-    if (c0) c0.classList.add("arrive");
+    if (fresh) revealAnswer(container);
     scrollDown();
     return;
   }
@@ -789,10 +788,25 @@ function renderAnswer(container, answer, warnung) {
   parts.push(html);
 
   container.innerHTML = parts.join("");
-  // Ankunfts-Moment: die frische Antwort glüht kurz auf
-  const card = container.querySelector(".answer");
-  if (card) card.classList.add("arrive");
+  if (fresh) revealAnswer(container);
   scrollDown();
+}
+
+// Frische Antworten entstehen nach und nach: die Abschnitte erscheinen
+// einer nach dem anderen und die Karte wächst dabei mit – wie abgearbeitet
+function revealAnswer(container) {
+  const card = container.querySelector(".answer");
+  if (!card) return;
+  card.classList.add("arrive");
+  const sections = card.querySelectorAll(".answer-head, .section, .footer-note");
+  sections.forEach((el, i) => {
+    el.style.display = "none";
+    setTimeout(() => {
+      el.style.display = "";
+      el.style.animation = "msgIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both";
+      scrollDown();
+    }, 200 + i * 400);
+  });
 }
 
 // Belohnungs-Feedback am Senden-Knopf: Burst beim Absenden, ✓ bei Ankunft
@@ -862,7 +876,7 @@ async function send() {
       thinkingEl.innerHTML = `<div class="warn">Es ist ein Fehler aufgetreten.</div>`;
       return;
     }
-    renderAnswer(thinkingEl, answer, warnung);
+    renderAnswer(thinkingEl, answer, warnung, true);
     chat.messages.push({ role: "neuron", answer, warnung });
     persistChats();
     addRegenRow();
@@ -953,7 +967,7 @@ async function regenerate() {
       thinkingEl.innerHTML = `<div class="warn">Es ist ein Fehler aufgetreten.</div>`;
       return;
     }
-    renderAnswer(thinkingEl, answer, warnung);
+    renderAnswer(thinkingEl, answer, warnung, true);
     chat.messages.push({ role: "neuron", answer, warnung });
     persistChats();
     addRegenRow();
