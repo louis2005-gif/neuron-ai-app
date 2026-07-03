@@ -1,5 +1,5 @@
 /* NEURON AI Service Worker – App-Shell offline, APIs immer live */
-const CACHE = "neuron-v20";
+const CACHE = "neuron-v21";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "radar.js", "bg.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
