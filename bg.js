@@ -1,7 +1,7 @@
-// NEURON AI – animierter Hintergrund: LEBENDES NEURONALES NETZ
-// Graue und rot glühende Knoten strömen langsam durch ein weiches Vektorfeld
-// über weißem Grund. Verbindungen entstehen und lösen sich nach Nähe –
-// das Netz bildet sich permanent neu.
+// NEURON AI – animierter Hintergrund: NEURONALER STROM
+// Ein dichtes Netz aus grauen, rot und blau glühenden Knoten fließt als
+// zusammenhängender Strom durchs Bild. Verbindungen pulsieren, entstehen
+// und lösen sich nach Nähe – das Netz bildet sich permanent neu.
 (function () {
   const canvas = document.getElementById("bgCanvas");
   if (!canvas) return;
@@ -9,6 +9,8 @@
 
   const RED = "229,64,47";       // Crimson (Markenfarbe)
   const RED_DEEP = "200,16,46";
+  const BLUE = "47,111,229";     // Akzent-Blau
+  const BLUE_DEEP = "29,78,178";
   const GRAY = "58,63,71";       // Anthrazit-Grau für Knoten
   const LINE = "60,65,75";       // Linien-Grau
 
@@ -21,11 +23,12 @@
   const rand = (a, b) => a + Math.random() * (b - a);
 
   function config() {
-    const count = Math.max(26, Math.min(120, Math.round(((W * H) / 16000) * intensity)));
+    const count = Math.max(50, Math.min(190, Math.round(((W * H) / 7800) * intensity)));
     return {
       count,
-      speed: 0.3 * intensity,
-      linkDist: Math.min(200, Math.max(110, Math.sqrt((W * H) / count) * 1.15)),
+      speed: 0.45 * intensity,
+      flow: 0.28 * intensity,      // gemeinsame Strömungsrichtung (nach rechts)
+      linkDist: Math.min(230, Math.max(140, Math.sqrt((W * H) / count) * 1.5)),
     };
   }
 
@@ -38,22 +41,24 @@
     return v * Math.PI;
   }
 
-  function spawn(n, edge) {
-    if (edge) {
-      // Neue Knoten treiben vom Rand herein – das Netz „strömt“
-      const side = (Math.random() * 4) | 0;
-      if (side === 0) { n.x = -30; n.y = rand(0, H); }
-      else if (side === 1) { n.x = W + 30; n.y = rand(0, H); }
-      else if (side === 2) { n.x = rand(0, W); n.y = -30; }
-      else { n.x = rand(0, W); n.y = H + 30; }
+  function paint(n) {
+    const r = Math.random();
+    n.kind = r < 0.16 ? "red" : r < 0.26 ? "blue" : "gray";
+    n.r = n.kind === "gray" ? rand(1.4, 2.6) : rand(2.4, 4.4);
+    n.ph = rand(0, Math.PI * 2);
+    n.drift = rand(0.55, 1.5);
+  }
+
+  function spawn(n, fromLeft) {
+    if (fromLeft) {
+      // Der Strom fließt nach rechts – neue Knoten treiben links herein
+      n.x = rand(-60, -10);
+      n.y = rand(0, H);
     } else {
       n.x = rand(0, W);
       n.y = rand(0, H);
     }
-    n.red = Math.random() < 0.22;                    // ~jeder 5. Knoten glüht rot
-    n.r = n.red ? rand(2.6, 4.6) : rand(1.4, 2.6);
-    n.ph = rand(0, Math.PI * 2);                     // Puls-Phase
-    n.drift = rand(0.5, 1.4);                        // individuelles Tempo
+    paint(n);
     return n;
   }
 
@@ -77,21 +82,28 @@
 
   function update() {
     const c = config();
-    const tt = t * 0.0001;
+    const tt = t * 0.00012;
     for (const n of nodes) {
       const a = fieldAngle(n.x, n.y, tt);
-      n.x += Math.cos(a) * c.speed * n.drift;
-      n.y += Math.sin(a) * c.speed * n.drift;
-      if (n.x < -40 || n.x > W + 40 || n.y < -40 || n.y > H + 40) spawn(n, true);
+      // Turbulenz + gemeinsame Strömung: alles fließt als ein Strom nach rechts
+      n.x += Math.cos(a) * c.speed * n.drift * 0.7 + c.flow * n.drift;
+      n.y += Math.sin(a) * c.speed * n.drift * 0.7 + Math.sin(tt * 3 + n.ph) * 0.08;
+      if (n.x > W + 40) spawn(n, true);
+      else if (n.x < -80 || n.y < -60 || n.y > H + 60) spawn(n, true);
     }
+  }
+
+  function linkColor(a, b, alpha) {
+    if (a.kind === "red" || b.kind === "red") return `rgba(${RED},${alpha})`;
+    if (a.kind === "blue" || b.kind === "blue") return `rgba(${BLUE},${alpha})`;
+    return `rgba(${LINE},${alpha * 0.7})`;
   }
 
   function draw() {
     const c = config();
     ctx.clearRect(0, 0, W, H);
-    const pulse = 0.5 + 0.5 * Math.sin(t * 0.0012);
 
-    // Verbindungen: Nähe entscheidet – so lösen sie sich beim Strömen und bilden sich neu
+    // Verbindungen: Nähe entscheidet; die Helligkeit pulsiert wie Nervensignale
     for (let i = 0; i < nodes.length; i++) {
       const a = nodes[i];
       for (let j = i + 1; j < nodes.length; j++) {
@@ -100,13 +112,11 @@
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d > c.linkDist) continue;
         const near = 1 - d / c.linkDist;             // 1 = ganz nah, 0 = an der Kante
-        if (a.red || b.red) {
-          ctx.strokeStyle = `rgba(${RED},${(0.06 + near * 0.3) * Math.min(1.2, intensity)})`;
-          ctx.lineWidth = 0.7 + near * 1.1;
-        } else {
-          ctx.strokeStyle = `rgba(${LINE},${(0.04 + near * 0.16) * Math.min(1.2, intensity)})`;
-          ctx.lineWidth = 0.5 + near * 0.5;
-        }
+        const pulse = 0.65 + 0.35 * Math.sin(t * 0.0021 + a.ph + b.ph);
+        const alpha = (0.08 + near * 0.42) * pulse * Math.min(1.2, intensity);
+        const colored = a.kind !== "gray" || b.kind !== "gray";
+        ctx.strokeStyle = linkColor(a, b, alpha);
+        ctx.lineWidth = (colored ? 0.7 : 0.5) + near * (colored ? 1.2 : 0.7);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
@@ -114,30 +124,31 @@
       }
     }
 
-    // Knoten: grau matt, rot mit weichem Puls-Glühen
+    // Knoten: grau matt; rot und blau mit weichem Puls-Glühen
     for (const n of nodes) {
-      if (n.red) {
-        const p = 0.6 + 0.4 * Math.sin(t * 0.0012 + n.ph);
-        const R = n.r * (3.4 + p * 1.6);
-        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, R);
-        g.addColorStop(0, `rgba(${RED},${0.32 * p})`);
-        g.addColorStop(1, `rgba(${RED},0)`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, R, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = `rgba(${RED_DEEP},${0.75 + 0.25 * p})`;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r * (0.95 + 0.15 * p), 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillStyle = `rgba(${GRAY},0.75)`;
+      if (n.kind === "gray") {
+        ctx.fillStyle = `rgba(${GRAY},0.72)`;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
         ctx.fill();
+        continue;
       }
+      const col = n.kind === "red" ? RED : BLUE;
+      const deep = n.kind === "red" ? RED_DEEP : BLUE_DEEP;
+      const p = 0.6 + 0.4 * Math.sin(t * 0.0014 + n.ph);
+      const R = n.r * (3.2 + p * 1.8);
+      const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, R);
+      g.addColorStop(0, `rgba(${col},${0.34 * p})`);
+      g.addColorStop(1, `rgba(${col},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(${deep},${0.75 + 0.25 * p})`;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r * (0.95 + 0.15 * p), 0, Math.PI * 2);
+      ctx.fill();
     }
-    void pulse;
   }
 
   function step() { update(); draw(); }

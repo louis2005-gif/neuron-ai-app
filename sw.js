@@ -1,5 +1,5 @@
 /* NEURON AI Service Worker – App-Shell offline, APIs immer live */
-const CACHE = "neuron-v8";
+const CACHE = "neuron-v9";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "radar.js", "bg.js",
   "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
@@ -15,7 +15,9 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;   // API-Aufrufe (Anthropic, Proxys) nie anfassen
   e.respondWith(
-    fetch(e.request).then((resp) => {
+    // no-cache: immer beim Server nachfragen, ob es eine neuere Version gibt –
+    // so kommen Design-Updates zuverlässig an (Offline-Fallback bleibt erhalten)
+    fetch(e.request, { cache: "no-cache" }).then((resp) => {
       if (resp.ok && e.request.method === "GET") {
         const copy = resp.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));

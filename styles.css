@@ -23,7 +23,7 @@
   --contra-line: rgba(229, 64, 47, 0.3);
   --shadow: 0 10px 30px rgba(29, 29, 31, 0.08);
   --radius: 16px;
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
