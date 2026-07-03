@@ -23,42 +23,38 @@
   const rand = (a, b) => a + Math.random() * (b - a);
 
   function config() {
-    const count = Math.max(50, Math.min(190, Math.round(((W * H) / 7800) * intensity)));
+    const count = Math.max(70, Math.min(230, Math.round(((W * H) / 6200) * intensity)));
     return {
       count,
-      speed: 0.45 * intensity,
-      flow: 0.28 * intensity,      // gemeinsame Strömungsrichtung (nach rechts)
-      linkDist: Math.min(230, Math.max(140, Math.sqrt((W * H) / count) * 1.5)),
+      flow: 0.5 * intensity,       // Strömungsgeschwindigkeit des Flusses (nach rechts)
+      linkDist: Math.min(190, Math.max(120, Math.sqrt((W * H) / count) * 1.55)),
     };
   }
 
-  // Weiches, langsam driftendes Vektorfeld (billiges Pseudo-Rauschen aus Sinus-Lagen)
-  function fieldAngle(x, y, tt) {
-    const v =
-      Math.sin(x * 0.0014 + tt) +
-      Math.cos(y * 0.0017 - tt * 0.7) +
-      Math.sin((x + y) * 0.001 + tt * 0.45);
-    return v * Math.PI;
+  // Mittellinie des Flusses: eine sich langsam verschiebende Welle,
+  // die sich von links nach rechts durchs ganze Bild zieht
+  function riverY(x, tt) {
+    return H * (0.5
+      + 0.27 * Math.sin(x * 0.0035 + tt * 1.6)
+      + 0.12 * Math.sin(x * 0.0011 - tt * 1.1));
   }
 
   function paint(n) {
     const r = Math.random();
     n.kind = r < 0.16 ? "red" : r < 0.26 ? "blue" : "gray";
-    n.r = n.kind === "gray" ? rand(1.4, 2.6) : rand(2.4, 4.4);
+    n.r = n.kind === "gray" ? rand(1.3, 2.4) : rand(2.2, 4.2);
     n.ph = rand(0, Math.PI * 2);
     n.drift = rand(0.55, 1.5);
+    // Lage quer zum Fluss: zur Mitte hin verdichtet → enge Cluster im Kern,
+    // lockere Ausläufer am Rand (wie im Referenzbild)
+    n.off = (Math.random() + Math.random() + Math.random()) / 1.5 - 1;
+    n.wob = rand(2, 7); // individuelles Auf-und-ab im Strom
   }
 
   function spawn(n, fromLeft) {
-    if (fromLeft) {
-      // Der Strom fließt nach rechts – neue Knoten treiben links herein
-      n.x = rand(-60, -10);
-      n.y = rand(0, H);
-    } else {
-      n.x = rand(0, W);
-      n.y = rand(0, H);
-    }
+    n.x = fromLeft ? rand(-80, -10) : rand(0, W);
     paint(n);
+    n.y = riverY(n.x, t * 0.00012) + n.off * H * 0.17;
     return n;
   }
 
@@ -83,13 +79,13 @@
   function update() {
     const c = config();
     const tt = t * 0.00012;
+    const band = H * 0.17;         // halbe Breite des Flussbetts
     for (const n of nodes) {
-      const a = fieldAngle(n.x, n.y, tt);
-      // Turbulenz + gemeinsame Strömung: alles fließt als ein Strom nach rechts
-      n.x += Math.cos(a) * c.speed * n.drift * 0.7 + c.flow * n.drift;
-      n.y += Math.sin(a) * c.speed * n.drift * 0.7 + Math.sin(tt * 3 + n.ph) * 0.08;
+      // Alles strömt nach rechts; die Höhe folgt der wandernden Flusslinie
+      n.x += c.flow * n.drift;
+      const wobble = Math.sin(t * 0.0011 + n.ph) * n.wob;
+      n.y = riverY(n.x, tt) + n.off * band + wobble;
       if (n.x > W + 40) spawn(n, true);
-      else if (n.x < -80 || n.y < -60 || n.y > H + 60) spawn(n, true);
     }
   }
 
