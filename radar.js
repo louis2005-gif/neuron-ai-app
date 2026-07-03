@@ -278,8 +278,8 @@ const NeuronRadar = (() => {
     const step = w / (values.length - 1);
     const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - 3 - (v / max) * (h - 8)).toFixed(1)}`);
     return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:36px">
-      <polygon points="0,${h} ${pts.join(" ")} ${w},${h}" fill="rgba(255,255,255,0.25)"/>
-      <polyline points="${pts.join(" ")}" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
+      <polygon points="0,${h} ${pts.join(" ")} ${w},${h}" fill="rgba(229,64,47,0.14)"/>
+      <polyline points="${pts.join(" ")}" fill="none" stroke="rgba(200,16,46,0.85)" stroke-width="2"/>
     </svg>`;
   }
 
@@ -292,9 +292,9 @@ const NeuronRadar = (() => {
       const y = i * rowH;
       const bw = Math.max((item.value / max) * (w - 105), 3);
       const label = item.label.length > 14 ? item.label.slice(0, 13) + "…" : item.label;
-      rows += `<text x="0" y="${y + 15}" font-size="11.5" fill="#d9cfc9">${esc(label)}</text>`;
+      rows += `<text x="0" y="${y + 15}" font-size="11.5" fill="#4a4d55">${esc(label)}</text>`;
       rows += `<rect x="100" y="${y + 5}" width="${bw.toFixed(1)}" height="13" rx="4" fill="${color}" opacity="${0.45 + 0.55 * (item.value / max)}"/>`;
-      rows += `<text x="${(100 + bw + 6).toFixed(1)}" y="${y + 15}" font-size="11" fill="#9a8f89">${item.value}</text>`;
+      rows += `<text x="${(100 + bw + 6).toFixed(1)}" y="${y + 15}" font-size="11" fill="#7d828c">${item.value}</text>`;
     });
     return `<svg viewBox="0 0 ${w} ${h}">${rows}</svg>`;
   }
@@ -310,8 +310,8 @@ const NeuronRadar = (() => {
       const x = 8 + i * slot + (slot - barW) / 2;
       const y = h - padB - bh;
       bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(bh, 2).toFixed(1)}" rx="6" fill="#e5402f" opacity="${0.5 + 0.5 * (v / max)}"/>`;
-      if (v > 0) bars += `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" font-size="13" fill="#d9cfc9">${v}</text>`;
-      if (labels[i]) bars += `<text x="${(8 + i * slot + slot / 2).toFixed(1)}" y="${h - 8}" text-anchor="middle" font-size="12" fill="#9a8f89">${labels[i]}</text>`;
+      if (v > 0) bars += `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" font-size="13" fill="#4a4d55">${v}</text>`;
+      if (labels[i]) bars += `<text x="${(8 + i * slot + slot / 2).toFixed(1)}" y="${h - 8}" text-anchor="middle" font-size="12" fill="#7d828c">${labels[i]}</text>`;
     });
     return `<svg viewBox="0 0 ${w} ${h}">${bars}</svg>`;
   }

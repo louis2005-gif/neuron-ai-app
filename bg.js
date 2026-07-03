@@ -1,65 +1,66 @@
-// NEURON AI – animierter Hintergrund: STRÖMUNGSFELD
-// Feine Partikel strömen wie Wind/Wasser durch ein weiches Vektorfeld und
-// ziehen leuchtende Spuren. Über einer langsam ziehenden Weinrot-Aurora.
-// Farben aus Mindless.pptx: Anthrazit #1C1E22, Crimson #E5402F/#C8102E/#F4604D, Weinrot #7A1A2A/#5E000C.
+// NEURON AI – animierter Hintergrund: LEBENDES NEURONALES NETZ
+// Graue und rot glühende Knoten strömen langsam durch ein weiches Vektorfeld
+// über weißem Grund. Verbindungen entstehen und lösen sich nach Nähe –
+// das Netz bildet sich permanent neu.
 (function () {
   const canvas = document.getElementById("bgCanvas");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
 
-  const STREAK_COLORS = ["229,64,47", "200,16,46", "244,96,77", "122,26,42"]; // rgb
-  const GLOW = ["#C8102E", "#7A1A2A", "#5E000C"];
-  const TRAIL = 12; // Länge der Spur (Anzahl gespeicherter Punkte)
+  const RED = "229,64,47";       // Crimson (Markenfarbe)
+  const RED_DEEP = "200,16,46";
+  const GRAY = "58,63,71";       // Anthrazit-Grau für Knoten
+  const LINE = "60,65,75";       // Linien-Grau
 
   let W = 0, H = 0, DPR = 1;
-  let parts = [], blobs = [];
+  let nodes = [];
   let raf = null, running = false, t = 0, intensity = 1;
 
   const media = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   const prefersReduced = () => Boolean(media && media.matches);
   const rand = (a, b) => a + Math.random() * (b - a);
-  const hexA = (hex, a) => {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-  };
 
   function config() {
+    const count = Math.max(26, Math.min(120, Math.round(((W * H) / 16000) * intensity)));
     return {
-      count: Math.max(20, Math.min(240, Math.round(((W * H) / 13000) * intensity))),
-      speed: 1.05 * intensity,
-      maxAge: 240,
+      count,
+      speed: 0.3 * intensity,
+      linkDist: Math.min(200, Math.max(110, Math.sqrt((W * H) / count) * 1.15)),
     };
   }
 
   // Weiches, langsam driftendes Vektorfeld (billiges Pseudo-Rauschen aus Sinus-Lagen)
   function fieldAngle(x, y, tt) {
     const v =
-      Math.sin(x * 0.0016 + tt) +
-      Math.cos(y * 0.0019 - tt * 0.7) +
-      Math.sin((x + y) * 0.0011 + tt * 0.45);
+      Math.sin(x * 0.0014 + tt) +
+      Math.cos(y * 0.0017 - tt * 0.7) +
+      Math.sin((x + y) * 0.001 + tt * 0.45);
     return v * Math.PI;
   }
 
-  function spawn(p) {
-    p.x = rand(0, W);
-    p.y = rand(0, H);
-    p.age = rand(0, config().maxAge);
-    p.hist = [];
-    p.col = STREAK_COLORS[(Math.random() * STREAK_COLORS.length) | 0];
-    return p;
+  function spawn(n, edge) {
+    if (edge) {
+      // Neue Knoten treiben vom Rand herein – das Netz „strömt“
+      const side = (Math.random() * 4) | 0;
+      if (side === 0) { n.x = -30; n.y = rand(0, H); }
+      else if (side === 1) { n.x = W + 30; n.y = rand(0, H); }
+      else if (side === 2) { n.x = rand(0, W); n.y = -30; }
+      else { n.x = rand(0, W); n.y = H + 30; }
+    } else {
+      n.x = rand(0, W);
+      n.y = rand(0, H);
+    }
+    n.red = Math.random() < 0.22;                    // ~jeder 5. Knoten glüht rot
+    n.r = n.red ? rand(2.6, 4.6) : rand(1.4, 2.6);
+    n.ph = rand(0, Math.PI * 2);                     // Puls-Phase
+    n.drift = rand(0.5, 1.4);                        // individuelles Tempo
+    return n;
   }
 
-  function initParts() {
+  function initNodes() {
     const c = config();
-    parts = [];
-    for (let i = 0; i < c.count; i++) parts.push(spawn({}));
-    blobs = [
-      { x: 0.24, y: 0.28, s: 0.55, col: GLOW[0], ph: 0 },
-      { x: 0.78, y: 0.72, s: 0.62, col: GLOW[1], ph: 2.1 },
-      { x: 0.62, y: 0.16, s: 0.42, col: GLOW[2], ph: 4.3 },
-    ];
-    // Spuren vorbefüllen, damit schon das erste Bild „strömt“ (unabhängig von rAF-Timing)
-    for (let i = 0; i < TRAIL + 4; i++) update();
+    nodes = [];
+    for (let i = 0; i < c.count; i++) nodes.push(spawn({}, false));
   }
 
   function resize() {
@@ -70,63 +71,73 @@
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    initParts();
-    if (running) { if (prefersReduced()) seedStatic(); else draw(); }
+    initNodes();
+    if (running) draw();
   }
 
   function update() {
     const c = config();
-    const tt = t * 0.00012;
-    for (const p of parts) {
-      const a = fieldAngle(p.x, p.y, tt);
-      p.x += Math.cos(a) * c.speed;
-      p.y += Math.sin(a) * c.speed;
-      p.hist.push(p.x, p.y);
-      if (p.hist.length > TRAIL * 2) p.hist.splice(0, 2);
-      p.age += 1;
-      if (p.age > c.maxAge || p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) {
-        spawn(p);
-      }
+    const tt = t * 0.0001;
+    for (const n of nodes) {
+      const a = fieldAngle(n.x, n.y, tt);
+      n.x += Math.cos(a) * c.speed * n.drift;
+      n.y += Math.sin(a) * c.speed * n.drift;
+      if (n.x < -40 || n.x > W + 40 || n.y < -40 || n.y > H + 40) spawn(n, true);
     }
-  }
-
-  function drawBlobs() {
-    ctx.globalCompositeOperation = "lighter";
-    for (const b of blobs) {
-      const cx = (b.x + 0.13 * Math.sin(t * 0.00028 + b.ph)) * W;
-      const cy = (b.y + 0.11 * Math.cos(t * 0.00024 + b.ph)) * H;
-      const R = Math.max(W, H) * b.s;
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-      g.addColorStop(0, hexA(b.col, 0.18 * Math.min(1.2, intensity)));
-      g.addColorStop(1, hexA(b.col, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalCompositeOperation = "source-over";
   }
 
   function draw() {
+    const c = config();
     ctx.clearRect(0, 0, W, H);
-    drawBlobs();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineCap = "round";
-    for (const p of parts) {
-      const h = p.hist;
-      const segs = h.length / 2 - 1;
-      if (segs < 1) continue;
-      for (let i = 0; i < segs; i++) {
-        const a = ((i + 1) / segs) * 0.5 * Math.min(1.2, intensity); // Kopf hell, Schwanz verblasst
-        ctx.strokeStyle = `rgba(${p.col},${a})`;
-        ctx.lineWidth = 0.6 + (i / segs) * 1.3;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.0012);
+
+    // Verbindungen: Nähe entscheidet – so lösen sie sich beim Strömen und bilden sich neu
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > c.linkDist) continue;
+        const near = 1 - d / c.linkDist;             // 1 = ganz nah, 0 = an der Kante
+        if (a.red || b.red) {
+          ctx.strokeStyle = `rgba(${RED},${(0.06 + near * 0.3) * Math.min(1.2, intensity)})`;
+          ctx.lineWidth = 0.7 + near * 1.1;
+        } else {
+          ctx.strokeStyle = `rgba(${LINE},${(0.04 + near * 0.16) * Math.min(1.2, intensity)})`;
+          ctx.lineWidth = 0.5 + near * 0.5;
+        }
         ctx.beginPath();
-        ctx.moveTo(h[i * 2], h[i * 2 + 1]);
-        ctx.lineTo(h[i * 2 + 2], h[i * 2 + 3]);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
         ctx.stroke();
       }
     }
-    ctx.globalCompositeOperation = "source-over";
+
+    // Knoten: grau matt, rot mit weichem Puls-Glühen
+    for (const n of nodes) {
+      if (n.red) {
+        const p = 0.6 + 0.4 * Math.sin(t * 0.0012 + n.ph);
+        const R = n.r * (3.4 + p * 1.6);
+        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, R);
+        g.addColorStop(0, `rgba(${RED},${0.32 * p})`);
+        g.addColorStop(1, `rgba(${RED},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(${RED_DEEP},${0.75 + 0.25 * p})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r * (0.95 + 0.15 * p), 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = `rgba(${GRAY},0.75)`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    void pulse;
   }
 
   function step() { update(); draw(); }
@@ -134,8 +145,8 @@
   function loop(ts) { t = ts || 0; step(); raf = requestAnimationFrame(loop); }
 
   function seedStatic() {
-    // Statisches, aber „strömendes“ Einzelbild: Spuren erst aufbauen, dann einmal zeichnen.
-    for (let i = 0; i < TRAIL + 6; i++) update();
+    // Bewegungsreduziert: ein ruhiges Standbild des Netzes
+    for (let i = 0; i < 30; i++) update();
     draw();
   }
 
@@ -143,7 +154,7 @@
     if (running) return;
     running = true;
     if (prefersReduced()) { seedStatic(); return; }
-    draw();                          // sofort ein Bild zeichnen (unabhängig von rAF)
+    draw();
     raf = requestAnimationFrame(loop);
   }
   function stop() {
@@ -165,7 +176,7 @@
   window.NeuronBG = {
     init(opts) { intensity = (opts && opts.intensity) || 1; resize(); },
     start, stop,
-    setIntensity(v) { intensity = v; initParts(); if (running && prefersReduced()) seedStatic(); },
+    setIntensity(v) { intensity = v; initNodes(); if (running && prefersReduced()) seedStatic(); },
     setEnabled(on) {
       canvas.style.display = on ? "block" : "none";
       if (on) start(); else stop();
