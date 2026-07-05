@@ -115,7 +115,7 @@ const NeuronRadar = (() => {
       const finish = () => {
         if (settled) return;
         settled = true;
-        if (fallback && fallback.length) resolve(fallback);
+        if (fallback !== null) resolve(fallback);
         else reject(errors[0] || new Error("Kein Proxy erreichbar"));
       };
       attempts.forEach(async (a) => {
@@ -127,14 +127,21 @@ const NeuronRadar = (() => {
           const text = await resp.text();
           if (a.kind === "rss2json") {
             const arts = fromRss2json(JSON.parse(text));
-            if (arts && arts.length) fallback = arts;
-            else throw new Error("rss2json leer");
+            if (arts) fallback = arts;               // auch leer = gültiges Ergebnis
+            else throw new Error("rss2json ungültig");
           } else {
             let xml = text;
             if (a.kind === "wrapped") { try { xml = JSON.parse(text).contents || ""; } catch (e) {} }
-            if (!xml || xml.indexOf("<item") === -1) throw new Error("ungültige Antwort");
+            if (!xml) throw new Error("leere Antwort");
+            if (xml.indexOf("<item") === -1) {
+              // Gültiger Feed ohne Treffer ist KEIN Fehler – nur ein leeres Ergebnis
+              if (xml.indexOf("<rss") !== -1 || xml.indexOf("<channel") !== -1 || xml.indexOf("<feed") !== -1) {
+                if (fallback === null) fallback = [];
+                return;
+              }
+              throw new Error("ungültige Antwort");
+            }
             const arts = parseRssXml(xml);
-            if (!arts.length) throw new Error("leerer Feed");
             if (!settled) { settled = true; resolve(arts); }
           }
         } catch (e) {
@@ -148,18 +155,41 @@ const NeuronRadar = (() => {
   }
 
   function normTitle(t) {
-    return t.replace(/\s+[-–|]\s+[^-–|]{2,40}$/, "").replace(/\W+/g, "").toLowerCase();
+    // Unicode-fähig: auch arabische, chinesische, russische … Titel behalten
+    // ihre Zeichen und werden korrekt dedupliziert statt verworfen
+    return t.replace(/\s+[-–|]\s+[^-–|]{2,40}$/, "").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
   }
 
+  // Weltweite Abdeckung: 12 Sprachräume, Meldungen bleiben im Original
+  const LOCALES = [
+    ["de", "DE", "DE:de"],           // Deutsch
+    ["en-US", "US", "US:en"],        // Englisch
+    ["fr", "FR", "FR:fr"],           // Französisch
+    ["es", "ES", "ES:es"],           // Spanisch
+    ["pt-BR", "BR", "BR:pt-419"],    // Portugiesisch
+    ["it", "IT", "IT:it"],           // Italienisch
+    ["tr", "TR", "TR:tr"],           // Türkisch
+    ["ar", "EG", "EG:ar"],           // Arabisch
+    ["ru", "RU", "RU:ru"],           // Russisch
+    ["zh-CN", "CN", "CN:zh-Hans"],   // Chinesisch
+    ["ja", "JP", "JP:ja"],           // Japanisch
+    ["hi", "IN", "IN:hi"],           // Hindi
+  ];
+
   async function collectTopic(query) {
-    const feeds = [["de", "DE", "DE:de"], ["en-US", "US", "US:en"]];
+    // Zwei Zeitfenster pro Sprachraum: das Neueste (7 Tage) und die
+    // letzten 10 Jahre – zusammen ergibt das Tiefe UND Aktualität
+    const past = new Date();
+    past.setFullYear(past.getFullYear() - 10);
+    const ranges = [" when:7d", " after:" + past.toISOString().slice(0, 10)];
     const errors = [], all = [];
-    await Promise.all(feeds.map(async ([hl, gl, ceid]) => {
-      const q = encodeURIComponent(query + " when:7d");
+    let okCount = 0;
+    await Promise.all(LOCALES.flatMap(([hl, gl, ceid]) => ranges.map(async (range) => {
+      const q = encodeURIComponent(query + range);
       const url = `https://news.google.com/rss/search?q=${q}&hl=${hl}&gl=${gl}&ceid=${ceid}`;
-      try { all.push(...await fetchFeed(url)); }
-      catch (e) { errors.push(`Google News (${hl}): ${e.message}`); }
-    }));
+      try { all.push(...await fetchFeed(url)); okCount++; }
+      catch (e) { errors.push(`Google News (${hl}${range}): ${e.message}`); }
+    })));
     all.sort((a, b) => (b.ts || 0) - (a.ts || 0));
     const seen = new Set(), unique = [];
     for (const a of all) {
@@ -168,7 +198,9 @@ const NeuronRadar = (() => {
       seen.add(k);
       unique.push(a);
     }
-    return { articles: unique, errors };
+    // Nur wenn WIRKLICH nichts geladen werden konnte, ist es ein Fehler –
+    // einzelne fehlgeschlagene Fenster/Proxys sind normal
+    return { articles: unique, errors: okCount > 0 ? [] : errors };
   }
 
   // ---------------------------------------------------------------------------
@@ -251,8 +283,7 @@ const NeuronRadar = (() => {
 
   function autoSummary(query, stats, analysis, total) {
     const parts = [];
-    const avg = (stats.week / 7).toFixed(1);
-    parts.push(`Zum Thema „${query}" wurden in den letzten 7 Tagen ${stats.week} Meldungen aus ${stats.sources} Quellen erfasst (im Schnitt ${avg} pro Tag), davon ${stats.last24} in den letzten 24 Stunden.`);
+    parts.push(`Zum Thema „${query}" sind ${total} Meldungen aus ${stats.sources} Quellen weltweit erfasst (Zeitraum bis zu 10 Jahre) – davon ${stats.week} aus den letzten 7 Tagen und ${stats.last24} aus den letzten 24 Stunden.`);
     if (stats.trend === Infinity) parts.push("Das Thema ist neu in der Berichterstattung aufgetaucht.");
     else if (stats.trend !== null && stats.trend > 15) parts.push(`Das Nachrichtenaufkommen steigt deutlich (+${stats.trend}% gegenüber dem Vortag).`);
     else if (stats.trend !== null && stats.trend < -15) parts.push(`Das Nachrichtenaufkommen geht zurück (${stats.trend}% gegenüber dem Vortag).`);
@@ -330,22 +361,23 @@ const NeuronRadar = (() => {
 
     const kennzahlen =
       `KENNZAHLEN (berechnet – nutze diese Zahlen im Bericht):\n` +
-      `- Meldungen gesamt (7 Tage): ${stats.week}, im Schnitt ${(stats.week / 7).toFixed(1)}/Tag\n` +
+      `- Meldungen gesamt geladen (Zeitraum bis zu 10 Jahre): ${articles.length}\n` +
+      `- Meldungen der letzten 7 Tage: ${stats.week}, im Schnitt ${(stats.week / 7).toFixed(1)}/Tag\n` +
       `- Letzte 24 Std.: ${stats.last24} Meldungen (Trend: ${trendTxt})\n` +
       `- Quellen: ${stats.sources}\n` +
       `- Aktivster Tag: ${stats.dayLabels[peak]} mit ${stats.perDay[peak]} Meldungen\n` +
       `- Meist berichtende Quellen: ${an.sources.map((s) => `${s.name} (${s.count})`).join(", ") || "–"}\n` +
       `- Häufigste Schlagwörter: ${an.keywords.map((k) => `${k.word} (${k.count}x)`).join(", ") || "–"}\n`;
 
-    const lines = articles.slice(0, 120).map((a) => {
+    const lines = articles.slice(0, 150).map((a) => {
       const ageH = a.ts ? Math.floor((now - a.ts) / 3600) : null;
       const age = ageH == null ? "" : (ageH < 48 ? `vor ${ageH} Std.` : `vor ${Math.floor(ageH / 24)} Tagen`);
       return `- ${a.title} (${a.source}, ${age})`;
     });
 
-    return `Du bist ein erfahrener Nachrichten-Analyst. Erstelle eine AUSFÜHRLICHE, faktenreiche Auswertung zum Thema "${query}" auf Deutsch – gründlich und quantitativ.\n\n`
+    return `Du bist ein erfahrener Nachrichten-Analyst. Erstelle eine AUSFÜHRLICHE, faktenreiche Auswertung zum Thema "${query}" auf Deutsch – gründlich und quantitativ. Berücksichtige sowohl die NEUESTEN Erkenntnisse als auch die Entwicklung über die letzten Jahre.\n\n`
       + kennzahlen
-      + `\nSCHLAGZEILEN der letzten 7 Tage (deutsche und internationale Medien):\n\n`
+      + `\nSCHLAGZEILEN (neueste zuerst; Zeitraum bis zu 10 Jahre; weltweite Medien in 12 Sprachen – Titel können in Originalsprache sein, werte sie inhaltlich korrekt aus und zitiere sie im Original):\n\n`
       + lines.join("\n")
       + `\n\nSchreibe eine detaillierte Auswertung mit GENAU diesen Abschnitten, jeweils mit Überschriftszeile (endend auf Doppelpunkt) gefolgt von Text bzw. Stichpunkten (mit "- "):\n\n`
       + `Überblick:\n(4-6 Sätze Gesamtlage mit konkreten Zahlen aus den Kennzahlen.)\n\n`
@@ -434,7 +466,7 @@ const NeuronRadar = (() => {
     } else {
       btn.textContent = "✨ Neu erstellen";
       box.innerHTML = formatReport(entry.text)
-        + `<div class="radar-ai-meta">Erstellt von ${esc(entry.model)} aus ${((rstate.data[topic.id] || {}).articles || []).length} Meldungen der letzten 7 Tage</div>`;
+        + `<div class="radar-ai-meta">Erstellt von ${esc(entry.model)} aus ${((rstate.data[topic.id] || {}).articles || []).length} Meldungen (weltweit, bis zu 10 Jahre)</div>`;
     }
   }
 
@@ -444,7 +476,7 @@ const NeuronRadar = (() => {
   async function fetchTopic(topic, force) {
     const entry = rstate.data[topic.id];
     if (entry && entry.loading) return;
-    if (!force && entry && Date.now() / 1000 - entry.fetched_at < 240) return;
+    if (!force && entry && Date.now() / 1000 - entry.fetched_at < 600) return;
     rstate.data[topic.id] = { ...(entry || {}), loading: true };
     renderGrid();
     try {
@@ -632,7 +664,7 @@ const NeuronRadar = (() => {
     const lines = articles.slice(0, 30).map((a) => `- ${a.title} (${a.source || "?"}, ${relTime(a.ts)})`);
     newChat();   // startet ein neues, eigenes Gespräch (erscheint in der Seitenleiste)
     state.pendingChatTitle = `📡 ${name}`;
-    state.newsContext = `Thema: ${name}\nAktuelle Schlagzeilen (7 Tage):\n${lines.join("\n")}`;
+    state.newsContext = `Thema: ${name}\nSchlagzeilen (weltweit, neueste zuerst, teils in Originalsprache):\n${lines.join("\n")}`;
     closeSidebar();
     showChat();
     $("#input").value = `Lass uns die aktuelle Nachrichtenlage zum Thema "${name}" besprechen: Was sind die wichtigsten Entwicklungen, wie ordnest du sie ein – und wo sollte ich kritisch sein?`;
@@ -732,7 +764,7 @@ const NeuronRadar = (() => {
       b.addEventListener("click", () => { rstate.range = b.dataset.range; renderDetail(); });
     });
     setInterval(renderUpdated, 30000);
-    setInterval(() => refreshAll(true), 10 * 60000);   // alle 10 Minuten
+    setInterval(() => refreshAll(true), 20 * 60000);   // alle 20 Minuten (weltweite Suche = mehr Anfragen)
   }
 
   // Wird beim Öffnen des Radar-Tabs aufgerufen
